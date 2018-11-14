@@ -49,7 +49,7 @@ package main
 
 import (
 	"fmt"
-	"goini/goini"
+	"github.com/vcqr/goini"
 )
 
 func main() {
@@ -84,9 +84,15 @@ func main() {
 
 ```
 
+请先安装goini
+```
+go get -u github.com/vcqr/goini
+```
+
 编译后可以执行命令
 ```
-./go -c app.ini
+
+./app -c app.ini
 ```
 ### 代码输出
 ``` txt
@@ -102,3 +108,8 @@ server3.db.url =  jdbc:mysql://localhost:3306/test
 ```
 
 如果在使用过程遇到问题，或者发现bug，或者有更好的建议可以发邮件给我！ 欢迎沟通交流！
+
+# License
+
+
+Goini is licensed under the 3-Clause BSD License. Goini is 100% free and open-source software.
