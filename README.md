@@ -62,7 +62,7 @@ func main() {
 	fmt.Println("server1.env = ", config.GetValBySection("env", "server1"))
 
 	// 获取server2的当前环境
-	fmt.Println("server1.env = ", config.GetValBySection("env", "server2"))
+	fmt.Println("server2.env = ", config.GetValBySection("env", "server2"))
 
 	// 获取server1的当前server配置
 	fmt.Println("server1.server.port = ", config.GetValBySection("server.port", "server1"))
@@ -98,7 +98,7 @@ go get -u github.com/vcqr/goini
 ``` txt
 app.env =  prod
 server1.env =  dev
-server1.env =  qa
+server2.env =  qa
 server1.server.port =  8081
 server2.server.port =  8082
 server2.server =  map[host:127.0.0.1 port:8082]
