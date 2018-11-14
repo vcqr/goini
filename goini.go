@@ -144,8 +144,6 @@ func New() *Goini {
 		path = currentPath + defaultIni
 	}
 
-	fmt.Println(path)
-
 	// 文件是否存在
 	isFile, _ := PathExists(path)
 	if !isFile {
