@@ -82,12 +82,11 @@ func main() {
 	fmt.Println("server3.db.url = ", config.GetValBySection("db.url", "server3"))
 }
 
-编译后可以执行命令
+```
 
+编译后可以执行命令
 ```
 ./go -c app.ini
-```
-
 ```
 ### 代码输出
 ``` txt
