@@ -42,43 +42,57 @@ type Goini struct {
 // 默认ini文件
 var defaultIni string = "application.ini"
 
-// 默认参数
+// 默认参数 -c
 var iniPath = flag.String("c", "", "ini file path")
+
+// 默认参数 -conf
 var confPath = flag.String("conf", "", "ini file path")
 
+// 存储节内容
 var sections map[string]interface{}
 
+// 存储节点内容
 var property map[string]interface{}
 
+// 存储父节内容
 var parentMap map[string]interface{}
 
+// 默认节名
 var defaultName = "default"
 
+// 记录当前节名
 var sectionName string
 
 /**
- * 获取值
+ * 默认节点取值
+ * @param key string 节点名称
+ * @return interface{}
  */
 func (goini *Goini) Get(key string) interface{} {
 	return goini.GetValBySection(key, "")
 }
 
 /**
- * 设置值
+ *  设置默认节点值
+ * @param key string 节点名称
+ * @param val string 值
  */
 func (goini *Goini) Set(key string, val string) {
 	goini.SetValBySection(key, val, "")
 }
 
 /**
- * 获取节
+ *  获取指定节内容
+ * @param section string 节名
+ * @return map[string]interface{}
  */
 func (goini *Goini) GetSection(section string) map[string]interface{} {
 	return GetSection(section)
 }
 
 /**
- * 新增节
+ *  新增节
+ * @param section string 节名
  */
 func (goini *Goini) SetSection(section string) {
 	//设置节点
@@ -86,7 +100,10 @@ func (goini *Goini) SetSection(section string) {
 }
 
 /**
- * 根据节获取值
+ *  根据节和节点名称获取值
+ * @param key string 节点名
+ * @param section string 节名
+ * @return interface{} 混合类型内容
  */
 func (goini *Goini) GetValBySection(key string, section string) interface{} {
 	if section == "" {
@@ -106,7 +123,10 @@ func (goini *Goini) GetValBySection(key string, section string) interface{} {
 }
 
 /**
- * 根据节设置值
+ *  根据节和节点名设置值
+ * @param key string 节点名
+ * @param val string 值
+ * @param section string 节名
  */
 func (goini *Goini) SetValBySection(key string, val string, section string) {
 	if section == "" {
@@ -126,7 +146,8 @@ func (goini *Goini) SetValBySection(key string, val string, section string) {
 }
 
 /**
- * 初始化
+ *  构造对象
+ * @return *Goini
  */
 func New() *Goini {
 	var path string
@@ -171,6 +192,42 @@ func New() *Goini {
 
 }
 
+/**
+ *  加载指定文件
+ * @param path string 文件路径
+ * @return *Goini
+ */
+func SetCofig(path string) *Goini {
+	// 文件是否存在
+	isFile, _ := PathExists(path)
+	if !isFile {
+		panic("goini error: " + path + " not exists")
+	}
+
+	config := &Goini{
+		filePath: path,
+	}
+
+	// 初始化节
+	sections = make(map[string]interface{})
+
+	// 初始化节点属性
+	property = make(map[string]interface{})
+
+	sectionName = defaultName
+
+	sections[sectionName] = property
+
+	// 解析文件
+	parseFile(config.filePath)
+
+	return config
+}
+
+/**
+ *  获取命令行中的文件路径
+ * @return string
+ */
 func ArgConfigPath() string {
 	flag.Parse()
 
@@ -184,6 +241,11 @@ func ArgConfigPath() string {
 	return path
 }
 
+/**
+ *  文件是否真实存在
+ * @param path string 文件路径
+ * @return bool, error
+ */
 func PathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 
@@ -225,7 +287,8 @@ func GetCurrentPath() (string, error) {
 }
 
 /**
- * 解析文件
+ *  解析文件内容
+ * @param filePath string 要解析的文件
  */
 func parseFile(filePath string) {
 
@@ -256,7 +319,7 @@ func parseFile(filePath string) {
 
 /**
  * 解析每行数据
- * @param rowStr string
+ * @param rowStr string 每行数据
  */
 func parseLine(rowStr string) {
 
@@ -349,13 +412,9 @@ func parseSection(rowStr string) {
 }
 
 /**
-
  * 解析节点
-
  * @param rowStr string
-
  */
-
 func parseProperty(rowStr string) {
 
 	posEq := strings.IndexAny(rowStr, "=")
@@ -386,8 +445,9 @@ func parseProperty(rowStr string) {
 }
 
 /**
- * 解析节名
+ * 解析节点名
  * @param rowStr string
+ * @return string
  */
 func parsNodeName(keyName string) string {
 	//去掉空格及制表符
@@ -405,8 +465,9 @@ func parsNodeName(keyName string) string {
 }
 
 /**
- * 解析值
+ * 解析节点值
  * @param rowStr string
+ * @return string
  */
 func parsNodeValue(valueStr string) string {
 	//去掉空格及制表符
@@ -451,7 +512,8 @@ func parsNodeValue(valueStr string) string {
 
 /**
  * 设置值
- * @param rowStr string
+ * @param keyName string 节点名
+ * @param valueStr string 节点值
  */
 func setProperty(keyName string, valueStr string) {
 
@@ -488,13 +550,11 @@ func setProperty(keyName string, valueStr string) {
 }
 
 /**
-
  * 设置链式key值
-
- * @param rowStr string
-
+ * @param prevStr string 父节点名
+ * @param currentStr string 当前节点名
+ * @param valueStr interface{} 混合类型的值
  */
-
 func setKeyVal(prevStr string, currentStr string, valueStr interface{}) {
 
 	tempObj := property[prevStr]
@@ -526,6 +586,7 @@ func setKeyVal(prevStr string, currentStr string, valueStr interface{}) {
 /**
  * 获取节信息
  * @param rowStr string
+ * @return map[string]interface{}
  */
 func GetSection(sectionKey string) map[string]interface{} {
 	// 使用默认值
