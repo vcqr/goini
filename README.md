@@ -1,4 +1,5 @@
-# Go parse ini file
+# Go parse ini file ![travisci](https://api.travis-ci.org/vcqr/goini.svg)
+
 可以解析带section的INI文件， 如果不带section，则 section 名默认为 “default”；
 
 一个节可以扩展或者通过在节的名称之后带一个冒号(:)来继承目标节的数据，如果被继承的节点key值重复，则覆盖被继承者的数据；具体可以看下面的例子。
