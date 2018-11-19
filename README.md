@@ -1,4 +1,4 @@
-# Go parse ini file ![travisci](https://api.travis-ci.org/vcqr/goini.svg)
+# Go parse ini file [![travis-ci](https://api.travis-ci.org/vcqr/goini.svg)](https://travis-ci.org/vcqr/goini)
 
 可以解析带section的INI文件， 如果不带section，则 section 名默认为 “default”；
 
