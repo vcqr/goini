@@ -12,14 +12,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
 type Config interface {
-	//获取值，默认取default节下的节点取值
+	// 获取值，默认取default节下的节点取值
 	Get(key string) interface{}
 
-	//设置值，默认从default节下节点设置
+	// 设置值，默认从default节下节点设置
 	Set(key string, val interface{})
 
 	// 使用节，获取相关节点的值
@@ -33,6 +34,21 @@ type Config interface {
 
 	// 取节值
 	GetSection(section string) map[string]interface{}
+
+	// 返回string类型的值
+	GetString(key string) string
+
+	// 返回int64类型的值
+	GetInt(key string) int64
+
+	// 返回float64类型的值
+	GetFloat(key string) float64
+
+	// 返回bool类型的值
+	GetBool(key string) bool
+
+	// 转化为结构体类型，obj引用传值
+	GetStruct(key string, obj *interface{})
 }
 
 type Goini struct {
@@ -73,16 +89,16 @@ func (goini *Goini) Get(key string) interface{} {
 }
 
 /**
- *  设置默认节点值
+ * 设置默认节点值
  * @param key string 节点名称
  * @param val string 值
  */
-func (goini *Goini) Set(key string, val string) {
-	goini.SetValBySection(key, val, "")
+func (goini *Goini) Set(key string, val interface{}) {
+	goini.SetValBySection(key, fmt.Sprintf("%v", val), "")
 }
 
 /**
- *  获取指定节内容
+ * 获取指定节内容
  * @param section string 节名
  * @return map[string]interface{}
  */
@@ -91,7 +107,7 @@ func (goini *Goini) GetSection(section string) map[string]interface{} {
 }
 
 /**
- *  新增节
+ * 新增节
  * @param section string 节名
  */
 func (goini *Goini) SetSection(section string) {
@@ -100,7 +116,7 @@ func (goini *Goini) SetSection(section string) {
 }
 
 /**
- *  根据节和节点名称获取值
+ * 根据节和节点名称获取值
  * @param key string 节点名
  * @param section string 节名
  * @return interface{} 混合类型内容
@@ -128,7 +144,7 @@ func (goini *Goini) GetValBySection(key string, section string) interface{} {
  * @param val string 值
  * @param section string 节名
  */
-func (goini *Goini) SetValBySection(key string, val string, section string) {
+func (goini *Goini) SetValBySection(key string, val interface{}, section string) {
 	if section == "" {
 		section = defaultName
 	}
@@ -141,12 +157,48 @@ func (goini *Goini) SetValBySection(key string, val string, section string) {
 	parseSection(section)
 
 	// 设置属性
-	parseProperty(key + "=" + val)
+	parseProperty(key + "=" + fmt.Sprintf("%v", val))
+}
+
+// 返回string类型的值
+func (goini *Goini) GetString(key string) string {
+	val := goini.Get(key)
+	if valStr, ok := val.(string); ok {
+		return valStr
+	}
+
+	return ""
+}
+
+// 返回int64类型的值
+func (goini *Goini) GetInt(key string) int64 {
+	val := goini.Get(key)
+	if valStr, ok := val.(string); ok {
+		if intVal, err := strconv.ParseInt(valStr, 64, 10); err != nil {
+			return intVal
+		}
+	}
+
+	return 0
+}
+
+// 返回float64类型的值
+func (goini *Goini) GetFloat(key string) float64 {
+	return 0
+}
+
+// 返回bool类型的值
+func (goini *Goini) GetBool(key string) bool {
+	return false
+}
+
+// 转化为结构体类型，obj引用传值
+func (goini *Goini) GetStruct(key string, obj *interface{}) {
 
 }
 
 /**
- *  构造对象
+ * 构造对象
  * @return *Goini
  */
 func New() *Goini {
@@ -193,7 +245,7 @@ func New() *Goini {
 }
 
 /**
- *  加载指定文件
+ * 加载指定文件
  * @param path string 文件路径
  * @return *Goini
  */
@@ -225,7 +277,7 @@ func SetCofig(path string) *Goini {
 }
 
 /**
- *  获取命令行中的文件路径
+ * 获取命令行中的文件路径
  * @return string
  */
 func ArgConfigPath() string {
@@ -242,7 +294,7 @@ func ArgConfigPath() string {
 }
 
 /**
- *  文件是否真实存在
+ * 文件是否真实存在
  * @param path string 文件路径
  * @return bool, error
  */
@@ -287,7 +339,7 @@ func GetCurrentPath() (string, error) {
 }
 
 /**
- *  解析文件内容
+ * 解析文件内容
  * @param filePath string 要解析的文件
  */
 func parseFile(filePath string) {
@@ -314,7 +366,6 @@ func parseFile(filePath string) {
 		parseLine(rowStr)
 
 	}
-
 }
 
 /**
@@ -349,7 +400,6 @@ func parseLine(rowStr string) {
 	} else if regNode.MatchString(rowStr) {
 		parseProperty(rowStr)
 	}
-
 }
 
 /**
@@ -390,11 +440,6 @@ func parseSection(rowStr string) {
 
 		//继承父节点
 		parentMap = GetSection(parent)
-
-		//jsonStr, _ := json.Marshal(parentMap)
-		//tempMap := make(map[string]interface{})
-		//json.Unmarshal([]byte(jsonStr), &tempMap)
-		//property = parentMap
 
 		//设置当前节点
 		sections[child] = parentMap
@@ -441,7 +486,6 @@ func parseProperty(rowStr string) {
 		property[keyName] = valueStr
 
 	}
-
 }
 
 /**
@@ -461,7 +505,6 @@ func parsNodeName(keyName string) string {
 	}
 
 	return keyName
-
 }
 
 /**
@@ -507,7 +550,6 @@ func parsNodeValue(valueStr string) string {
 	}
 
 	return valueStr
-
 }
 
 /**
@@ -546,7 +588,6 @@ func setProperty(keyName string, valueStr string) {
 	} else {
 		property[keyName] = valueStr
 	}
-
 }
 
 /**
@@ -580,7 +621,6 @@ func setKeyVal(prevStr string, currentStr string, valueStr interface{}) {
 		property[prevStr] = tempMap
 
 	}
-
 }
 
 /**
@@ -605,5 +645,4 @@ func GetSection(sectionKey string) map[string]interface{} {
 	json.Unmarshal([]byte(jsonStr), &property)
 
 	return property
-
 }
