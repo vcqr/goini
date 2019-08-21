@@ -18,16 +18,16 @@ import (
 
 type Config interface {
 	// 获取值，默认取default节下的节点取值
-	Get(key string) interface{}
+	Get(key string, args ...interface{}) interface{}
 
 	// 设置值，默认从default节下节点设置
 	Set(key string, val interface{})
 
 	// 使用节，获取相关节点的值
-	GetValBySection(key string, section string) interface{}
+	getValBySection(key string, section string) interface{}
 
 	// 使用节，设置相关节点的值
-	SetValBySection(key string, val interface{}, section string)
+	setValBySection(key string, val interface{}, section string)
 
 	// 设置节
 	SetSection(section string)
@@ -36,19 +36,19 @@ type Config interface {
 	GetSection(section string) map[string]interface{}
 
 	// 返回string类型的值
-	GetString(key string) string
+	GetString(key string, args ...interface{}) string
 
 	// 返回int64类型的值
-	GetInt(key string) int64
+	GetInt(key string, args ...interface{}) int64
 
 	// 返回float64类型的值
-	GetFloat(key string) float64
+	GetFloat(key string, args ...interface{}) float64
 
 	// 返回bool类型的值
-	GetBool(key string) bool
+	GetBool(key string, args ...interface{}) bool
 
 	// 转化为结构体类型，obj引用传值
-	GetStruct(key string, obj *interface{})
+	GetStruct(key string, obj interface{}, args ...interface{})
 }
 
 type Goini struct {
@@ -74,7 +74,7 @@ var property map[string]interface{}
 var parentMap map[string]interface{}
 
 // 默认节名
-var defaultName = "default"
+const defaultName = "default"
 
 // 记录当前节名
 var sectionName string
@@ -84,8 +84,24 @@ var sectionName string
  * @param key string 节点名称
  * @return interface{}
  */
-func (goini *Goini) Get(key string) interface{} {
-	return goini.GetValBySection(key, "")
+func (goini *Goini) Get(key string, args ...interface{}) interface{} {
+	var retVal interface{}
+
+	argLen := len(args)
+	if argLen > 0 {
+		// 若可变参数长度大于0， 则取第一个参数为节名
+		retVal = goini.getValBySection(key, fmt.Sprintf("%v", args[0]))
+	} else {
+		// 取默认节
+		retVal = goini.getValBySection(key, defaultName)
+	}
+
+	// 可变参数长度大于2，如果未获取到值的情况下，则取第二个可变参数为默认值返回
+	if argLen >= 2 && retVal == nil {
+		retVal = args[1]
+	}
+
+	return retVal
 }
 
 /**
@@ -94,7 +110,7 @@ func (goini *Goini) Get(key string) interface{} {
  * @param val string 值
  */
 func (goini *Goini) Set(key string, val interface{}) {
-	goini.SetValBySection(key, fmt.Sprintf("%v", val), "")
+	goini.setValBySection(key, fmt.Sprintf("%v", val), "")
 }
 
 /**
@@ -121,21 +137,16 @@ func (goini *Goini) SetSection(section string) {
  * @param section string 节名
  * @return interface{} 混合类型内容
  */
-func (goini *Goini) GetValBySection(key string, section string) interface{} {
-	if section == "" {
+func (goini *Goini) getValBySection(key string, section string) interface{} {
+	if section == "" || section == "<nil>" {
 		section = defaultName
 	}
 
-	tempRet := make(map[string]interface{})
-	jsonStr, err := json.Marshal(sections[section])
-
-	if err != nil {
-		return nil
+	if tempRet, ok := sections[section].(map[string]interface{}); ok {
+		return tempRet[key]
 	}
 
-	json.Unmarshal([]byte(jsonStr), &tempRet)
-
-	return tempRet[key]
+	return nil
 }
 
 /**
@@ -144,7 +155,7 @@ func (goini *Goini) GetValBySection(key string, section string) interface{} {
  * @param val string 值
  * @param section string 节名
  */
-func (goini *Goini) SetValBySection(key string, val interface{}, section string) {
+func (goini *Goini) setValBySection(key string, val interface{}, section string) {
 	if section == "" {
 		section = defaultName
 	}
@@ -161,8 +172,9 @@ func (goini *Goini) SetValBySection(key string, val interface{}, section string)
 }
 
 // 返回string类型的值
-func (goini *Goini) GetString(key string) string {
-	val := goini.Get(key)
+func (goini *Goini) GetString(key string, args ...interface{}) string {
+	val := goini.Get(key, args...)
+
 	if valStr, ok := val.(string); ok {
 		return valStr
 	}
@@ -171,11 +183,12 @@ func (goini *Goini) GetString(key string) string {
 }
 
 // 返回int64类型的值
-func (goini *Goini) GetInt(key string) int64 {
-	val := goini.Get(key)
+func (goini *Goini) GetInt(key string, args ...interface{}) int64 {
+	val := goini.Get(key, args...)
+
 	if valStr, ok := val.(string); ok {
-		if intVal, err := strconv.ParseInt(valStr, 64, 10); err != nil {
-			return intVal
+		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
+			return int64(floatVal)
 		}
 	}
 
@@ -183,18 +196,46 @@ func (goini *Goini) GetInt(key string) int64 {
 }
 
 // 返回float64类型的值
-func (goini *Goini) GetFloat(key string) float64 {
+func (goini *Goini) GetFloat(key string, args ...interface{}) float64 {
+	val := goini.Get(key, args...)
+
+	if valStr, ok := val.(string); ok {
+		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
+			return floatVal
+		}
+	}
+
 	return 0
 }
 
 // 返回bool类型的值
-func (goini *Goini) GetBool(key string) bool {
+func (goini *Goini) GetBool(key string, args ...interface{}) bool {
+	val := goini.Get(key, args...)
+
+	if valStr, ok := val.(string); ok {
+		// 补充一些常用的词
+		switch valStr {
+		case "y", "Y", "on", "ON", "On", "yes", "YES", "Yes", "enabled", "ENABLED", "Enabled":
+			valStr = "true"
+		case "n", "N", "off", "OFF", "Off", "no", "NO", "No", "disabled", "DISABLED", "Disabled":
+			valStr = "false"
+		}
+
+		if boolVal, err := strconv.ParseBool(valStr); err == nil {
+			return boolVal
+		}
+	}
+
 	return false
 }
 
 // 转化为结构体类型，obj引用传值
-func (goini *Goini) GetStruct(key string, obj *interface{}) {
-
+func (goini *Goini) GetStruct(key string, obj interface{}, args ...interface{}) {
+	val := goini.Get(key, args...)
+	if valMap, ok := val.(map[string]interface{}); ok {
+		jsonStr, _ := json.Marshal(valMap)
+		json.Unmarshal([]byte(jsonStr), obj)
+	}
 }
 
 /**
@@ -249,7 +290,7 @@ func New() *Goini {
  * @param path string 文件路径
  * @return *Goini
  */
-func SetCofig(path string) *Goini {
+func Load(path string) *Goini {
 	// 文件是否存在
 	isFile, _ := PathExists(path)
 	if !isFile {
