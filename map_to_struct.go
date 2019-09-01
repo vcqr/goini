@@ -24,6 +24,8 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 	
 	for i := 0; i < objT.NumField(); i++ {
 		field := objT.Field(i)
+
+		tk := field.Type.Kind()
 		
 		mapKey := field.Name
 		tag, _ := parseTag(field.Tag.Get("json"))
@@ -34,48 +36,86 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 		mapVal, _ := srcData[mapKey]
 		
 		var kv reflect.Value
+
+		// 检查具体的类型是否指针
+		k := field.Type.Kind()
+		if k == reflect.Ptr {
+			k = field.Type.Elem().Kind()
+		}
 		
-		switch field.Type.Kind() {
+		switch k {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			setVal, err := parseInt(mapVal)
 			if err != nil {
 				break
 			}
-			
-			kv = reflect.ValueOf(setVal).Convert(field.Type)
+
+			if tk == reflect.Ptr {
+				kv = reflect.ValueOf(&setVal).Convert(field.Type)
+			} else {
+				kv = reflect.ValueOf(setVal).Convert(field.Type)
+			}
+
 			objV.Field(i).Set(kv)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 			setVal, err := parseUint(mapVal)
 			if err != nil {
 				break
 			}
-			
-			kv = reflect.ValueOf(setVal).Convert(field.Type)
+
+			if tk == reflect.Ptr {
+				kv = reflect.ValueOf(&setVal).Convert(field.Type)
+			} else {
+				kv = reflect.ValueOf(setVal).Convert(field.Type)
+			}
+
 			objV.Field(i).Set(kv)
 		case reflect.Float32, reflect.Float64:
 			setVal, err := parseFloat(mapVal)
 			if err != nil {
 				break
 			}
-			
-			kv = reflect.ValueOf(setVal).Convert(field.Type)
+
+			if tk == reflect.Ptr {
+				kv = reflect.ValueOf(&setVal).Convert(field.Type)
+			} else {
+				kv = reflect.ValueOf(setVal).Convert(field.Type)
+			}
+
 			objV.Field(i).Set(kv)
 		case reflect.String:
 			if valStr, ok := mapVal.(string); ok {
-				objV.Field(i).SetString(valStr)
+				if tk == reflect.Ptr {
+					kv = reflect.ValueOf(&valStr).Convert(field.Type)
+					objV.Field(i).Set(kv)
+				} else {
+					objV.Field(i).SetString(valStr)
+				}
+
 			} else {
 				break
 			}
 		case reflect.Interface:
-			kv = reflect.ValueOf(mapVal)
+			if tk == reflect.Ptr {
+				kv = reflect.ValueOf(&mapVal).Convert(field.Type)
+			} else {
+				kv = reflect.ValueOf(mapVal).Convert(field.Type)
+			}
+
 			objV.Field(i).Set(kv)
 		case reflect.Bool:
 			setVal, err := parseBool(mapVal)
 			if err != nil {
 				break
 			}
+
+			if tk == reflect.Ptr {
+				kv = reflect.ValueOf(&setVal).Convert(field.Type)
+			} else {
+				kv = reflect.ValueOf(setVal).Convert(field.Type)
+			}
 			
-			objV.Field(i).SetBool(setVal)
+			objV.Field(i).Set(kv)
 		case reflect.Slice:
 			setVal, err := parseSlice(mapVal, field.Type)
 			if err != nil {
@@ -87,6 +127,7 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 			// todo
 			break
 		case reflect.Map:
+			// todo
 			break
 		default:
 			if objV.IsValid() {
