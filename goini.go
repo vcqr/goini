@@ -230,11 +230,11 @@ func (goini *Goini) GetBool(key string, args ...interface{}) bool {
 }
 
 // 转化为结构体类型，obj引用传值
-func (goini *Goini) GetStruct(key string, obj interface{}, args ...interface{}) {
+func (goini *Goini) GetStruct(key string, targetObj interface{}, args ...interface{}) {
 	val := goini.Get(key, args...)
+
 	if valMap, ok := val.(map[string]interface{}); ok {
-		jsonStr, _ := json.Marshal(valMap)
-		json.Unmarshal([]byte(jsonStr), obj)
+		mapToStruct("", valMap, targetObj)
 	}
 }
 
