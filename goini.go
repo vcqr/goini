@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -21,16 +22,13 @@ type Config interface {
 	Get(key string, args ...interface{}) interface{}
 
 	// 设置值，默认从default节下节点设置
-	Set(key string, val interface{})
+	Set(key string, val interface{}, args ...interface{})
 
 	// 使用节，获取相关节点的值
 	getValBySection(key string, section string) interface{}
 
 	// 使用节，设置相关节点的值
 	setValBySection(key string, val interface{}, section string)
-
-	// 设置节
-	SetSection(section string)
 
 	// 取节值
 	GetSection(section string) map[string]interface{}
@@ -47,8 +45,14 @@ type Config interface {
 	// 返回bool类型的值
 	GetBool(key string, args ...interface{}) bool
 
+	// 转换为指定的切片
+	GetSlice(key string, delimiter string, targetObj interface{}, args ...interface{})
+
+	// 转化为map类型，obj引用传值
+	GetMap(key string, targetObj interface{}, args ...interface{})
+
 	// 转化为结构体类型，obj引用传值
-	GetStruct(key string, obj interface{}, args ...interface{})
+	GetStruct(key string, targetObj interface{}, args ...interface{})
 }
 
 type Goini struct {
@@ -97,8 +101,10 @@ func (goini *Goini) Get(key string, args ...interface{}) interface{} {
 	}
 
 	// 可变参数长度大于2，如果未获取到值的情况下，则取第二个可变参数为默认值返回
-	if argLen >= 2 && retVal == nil {
-		retVal = args[1]
+	if argLen >= 2 {
+		if retVal == nil || retVal == "" {
+			retVal = args[1]
+		}
 	}
 
 	return retVal
@@ -107,10 +113,18 @@ func (goini *Goini) Get(key string, args ...interface{}) interface{} {
 /**
  * 设置默认节点值
  * @param key string 节点名称
- * @param val string 值
+ * @param val interface{} 混合类型
+ * @param args 可变参数，当长度大于0，则设置多个节
  */
-func (goini *Goini) Set(key string, val interface{}) {
-	goini.setValBySection(key, fmt.Sprintf("%v", val), "")
+func (goini *Goini) Set(key string, val interface{}, args ...interface{}) {
+	if len(args) > 0 {
+		for _, arg := range args {
+			goini.setValBySection(key, fmt.Sprintf("%v", val), fmt.Sprintf("%v", arg))
+		}
+	} else {
+		goini.setValBySection(key, fmt.Sprintf("%v", val), defaultName)
+	}
+
 }
 
 /**
@@ -120,15 +134,6 @@ func (goini *Goini) Set(key string, val interface{}) {
  */
 func (goini *Goini) GetSection(section string) map[string]interface{} {
 	return GetSection(section)
-}
-
-/**
- * 新增节
- * @param section string 节名
- */
-func (goini *Goini) SetSection(section string) {
-	//设置节点
-	parseSection(section)
 }
 
 /**
@@ -212,21 +217,63 @@ func (goini *Goini) GetFloat(key string, args ...interface{}) float64 {
 func (goini *Goini) GetBool(key string, args ...interface{}) bool {
 	val := goini.Get(key, args...)
 
-	if valStr, ok := val.(string); ok {
-		// 补充一些常用的词
-		switch valStr {
-		case "y", "Y", "on", "ON", "On", "yes", "YES", "Yes", "enabled", "ENABLED", "Enabled":
-			valStr = "true"
-		case "n", "N", "off", "OFF", "Off", "no", "NO", "No", "disabled", "DISABLED", "Disabled":
-			valStr = "false"
-		}
+	ret, _ := parseBool(val)
 
-		if boolVal, err := strconv.ParseBool(valStr); err == nil {
-			return boolVal
-		}
+	return ret
+}
+
+// 转换为切片类型
+func (goini *Goini) GetSlice(key string, delimiter string, targetObj interface{}, args ...interface{}) {
+	val := goini.Get(key, args...)
+
+	objV := reflect.ValueOf(targetObj)
+	objT := reflect.TypeOf(targetObj)
+
+	// 目标对象必须是指针类型
+	if objT.Kind() == reflect.Ptr {
+		objV = objV.Elem()
+		objT = objT.Elem()
+	} else {
+		return
 	}
 
-	return false
+	// 目标对象需要是切片类型
+	if objT.Kind() != reflect.Slice {
+		return
+	}
+
+	if val == "" {
+		return
+	}
+
+	if retVal, err := parseSlice(val, objT, delimiter); err == nil {
+		objV.Set(retVal)
+	}
+}
+
+// 转化为map类型，obj引用传值
+func (goini *Goini) GetMap(key string, targetObj interface{}, args ...interface{}) {
+	val := goini.Get(key, args...)
+
+	objV := reflect.ValueOf(targetObj)
+	objT := reflect.TypeOf(targetObj)
+
+	if objT.Kind() == reflect.Ptr {
+		objV = objV.Elem()
+		objT = objT.Elem()
+	}
+
+	if objT.Kind() != reflect.Map {
+		return
+	}
+
+	if objT.Key().Kind() != reflect.String {
+		return
+	}
+
+	if retVal, err := parseMap(val, objT); err == nil {
+		objV.Set(retVal)
+	}
 }
 
 // 转化为结构体类型，obj引用传值

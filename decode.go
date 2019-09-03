@@ -10,125 +10,84 @@ import (
 func mapToStruct(key string, srcData map[string]interface{}, targetObj interface{}) error {
 	objV := reflect.ValueOf(targetObj)
 	objT := reflect.TypeOf(targetObj)
-	
-	if objV.Kind() == reflect.Ptr {
+
+	if objT.Kind() == reflect.Ptr {
 		objV = objV.Elem()
 		objT = objT.Elem()
 	} else {
-		return errors.New("The targe are not ptr")
+		return errors.New("goini: The target are not ptr")
 	}
-	
-	if objV.Kind() != reflect.Struct {
-		return errors.New("The target are not struct")
+
+	if objT.Kind() != reflect.Struct {
+		return errors.New("goini: The target are not struct")
 	}
-	
+
 	for i := 0; i < objT.NumField(); i++ {
+		if !objV.Field(i).CanSet() {
+			continue
+		}
+
 		field := objT.Field(i)
 
 		tk := field.Type.Kind()
-		
+
 		mapKey := field.Name
-		tag, _ := parseTag(field.Tag.Get("json"))
+		tag, _ := parseTag(field.Tag.Get("json"), ",")
+		if tag == "-" {
+			continue
+		}
+
 		if tag != "" {
 			mapKey = tag
 		}
-		
+
 		mapVal, _ := srcData[mapKey]
-		
-		var kv reflect.Value
 
 		// 检查具体的类型是否指针
 		k := field.Type.Kind()
 		if k == reflect.Ptr {
 			k = field.Type.Elem().Kind()
 		}
-		
+
+		if kv := decodeValue(mapVal, field.Type); kv.IsValid() {
+			if tk == reflect.Ptr {
+				// 初始化指针
+				ptrKv := reflect.New(kv.Type())
+				ptrKv.Elem().Set(kv)
+
+				objV.Field(i).Set(ptrKv)
+
+			} else {
+				objV.Field(i).Set(kv)
+			}
+
+			continue
+		}
+
 		switch k {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			setVal, err := parseInt(mapVal)
-			if err != nil {
-				break
-			}
-
-			if tk == reflect.Ptr {
-				kv = reflect.ValueOf(&setVal).Convert(field.Type)
-			} else {
-				kv = reflect.ValueOf(setVal).Convert(field.Type)
-			}
-
-			objV.Field(i).Set(kv)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-			setVal, err := parseUint(mapVal)
-			if err != nil {
-				break
-			}
-
-			if tk == reflect.Ptr {
-				kv = reflect.ValueOf(&setVal).Convert(field.Type)
-			} else {
-				kv = reflect.ValueOf(setVal).Convert(field.Type)
-			}
-
-			objV.Field(i).Set(kv)
-		case reflect.Float32, reflect.Float64:
-			setVal, err := parseFloat(mapVal)
-			if err != nil {
-				break
-			}
-
-			if tk == reflect.Ptr {
-				kv = reflect.ValueOf(&setVal).Convert(field.Type)
-			} else {
-				kv = reflect.ValueOf(setVal).Convert(field.Type)
-			}
-
-			objV.Field(i).Set(kv)
-		case reflect.String:
-			if valStr, ok := mapVal.(string); ok {
-				if tk == reflect.Ptr {
-					kv = reflect.ValueOf(&valStr).Convert(field.Type)
-					objV.Field(i).Set(kv)
-				} else {
-					objV.Field(i).SetString(valStr)
-				}
-
-			} else {
-				break
-			}
-		case reflect.Interface:
-			if tk == reflect.Ptr {
-				kv = reflect.ValueOf(&mapVal).Convert(field.Type)
-			} else {
-				kv = reflect.ValueOf(mapVal).Convert(field.Type)
-			}
-
-			objV.Field(i).Set(kv)
-		case reflect.Bool:
-			setVal, err := parseBool(mapVal)
-			if err != nil {
-				break
-			}
-
-			if tk == reflect.Ptr {
-				kv = reflect.ValueOf(&setVal).Convert(field.Type)
-			} else {
-				kv = reflect.ValueOf(setVal).Convert(field.Type)
-			}
-			
-			objV.Field(i).Set(kv)
 		case reflect.Slice:
-			setVal, err := parseSlice(mapVal, field.Type)
+			arrTag, arrSeq := parseTag(field.Tag.Get("ini"), "=")
+			seq := ","
+			if arrTag == "seq" && arrSeq != "" {
+				seq = string(arrSeq)
+			}
+
+			setVal, err := parseSlice(mapVal, field.Type, seq)
 			if err != nil {
 				break
 			}
-			
+
 			objV.Field(i).Set(setVal)
 		case reflect.Array:
 			// todo
 			break
 		case reflect.Map:
-			// todo
-			break
+			setVal, err := parseMap(mapVal, field.Type)
+			if err != nil {
+				break
+			}
+
+			objV.Field(i).Set(setVal)
 		default:
 			if objV.IsValid() {
 				value := objV.Field(i)
@@ -137,25 +96,25 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 					if value.IsNil() {
 						objV.Field(i).Set(reflect.New(field.Type.Elem()))
 					}
-					
+
 					val = objV.Field(i).Interface()
 				} else if value.Kind() == reflect.Struct {
 					val = value.Addr().Interface()
 				}
-				
-				if key == ""{
+
+				if key == "" {
 					mapKey = strings.ToLower(objV.Type().Name()) + "." + mapKey
 				}
-				
+
 				nextData := srcData[mapKey]
-				
+
 				if nextMap, ok := nextData.(map[string]interface{}); ok {
 					mapToStruct(mapKey, nextMap, val)
 				}
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -167,8 +126,8 @@ func parseInt(val interface{}) (int64, error) {
 			return 0, err
 		}
 	}
-	
-	return 0, errors.New("string asert error")
+
+	return 0, errors.New("goini: string assert error")
 }
 
 func parseUint(val interface{}) (uint64, error) {
@@ -179,8 +138,8 @@ func parseUint(val interface{}) (uint64, error) {
 			return 0, err
 		}
 	}
-	
-	return 0, errors.New("string asert error")
+
+	return 0, errors.New("goini: string assert error")
 }
 
 func parseFloat(val interface{}) (float64, error) {
@@ -191,8 +150,8 @@ func parseFloat(val interface{}) (float64, error) {
 			return 0, err
 		}
 	}
-	
-	return 0, errors.New("string asert error")
+
+	return 0, errors.New("goini: string assert error")
 }
 
 func parseInterface(val interface{}) interface{} {
@@ -208,18 +167,18 @@ func parseBool(val interface{}) (bool, error) {
 		case "n", "N", "off", "OFF", "Off", "no", "NO", "No", "disabled", "DISABLED", "Disabled":
 			valStr = "false"
 		}
-		
+
 		if boolVal, err := strconv.ParseBool(valStr); err == nil {
 			return boolVal, nil
 		}
 	}
-	
-	return false, errors.New("string asert error")
+
+	return false, errors.New("goini: string assert error")
 }
 
-func parseSlice(val interface{}, t reflect.Type) (reflect.Value, error) {
+func parseSlice(val interface{}, t reflect.Type, delimiter string) (reflect.Value, error) {
 	if valStr, ok := val.(string); ok {
-		strArr := strings.Split(valStr, ",")
+		strArr := strings.Split(valStr, delimiter)
 		iL := len(strArr)
 
 		// 初始化切片
@@ -227,23 +186,58 @@ func parseSlice(val interface{}, t reflect.Type) (reflect.Value, error) {
 
 		if iL > 0 {
 			var indexT reflect.Type
-			for i :=0 ; i < arr.Len(); i++ {
+			for i := 0; i < arr.Len(); i++ {
 				if indexT == nil {
 					indexT = arr.Index(i).Type()
 				}
 
 				// 根据具体的类型设置对应的值
-				setSliceValue(strArr[i], indexT, arr.Index(i))
+				if kv := decodeValue(strArr[i], indexT); kv.IsValid() {
+					if indexT.Kind() == reflect.Ptr {
+						// 初始化指针
+						ptrKv := reflect.New(kv.Type())
+						ptrKv.Elem().Set(kv)
+
+						arr.Index(i).Set(ptrKv)
+					} else {
+						arr.Index(i).Set(kv)
+					}
+				}
 			}
 		}
 
 		return arr, nil
 	}
-	
-	return reflect.MakeSlice(t, 0, 0), errors.New("string asert error")
+
+	return reflect.MakeSlice(t, 0, 0), errors.New("goini: string assert error")
 }
 
-func  setSliceValue (v string, t reflect.Type,  target reflect.Value) {
+func parseMap(val interface{}, t reflect.Type) (reflect.Value, error) {
+	m := reflect.MakeMap(t)
+
+	if valMap, valMapOk := val.(map[string]interface{}); valMapOk {
+		for k, v := range valMap {
+			if vStr, ok := v.(string); ok {
+				if kv := decodeValue(vStr, t.Elem()); kv.IsValid() {
+					if t.Elem().Kind() == reflect.Ptr {
+						// 初始化指针
+						ptrKv := reflect.New(kv.Type())
+						ptrKv.Elem().Set(kv)
+
+						m.SetMapIndex(reflect.ValueOf(k), ptrKv)
+
+					} else {
+						m.SetMapIndex(reflect.ValueOf(k), kv)
+					}
+				}
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func decodeValue(v interface{}, t reflect.Type) reflect.Value {
 	var kv reflect.Value
 
 	// 检查具体的类型
@@ -260,7 +254,7 @@ func  setSliceValue (v string, t reflect.Type,  target reflect.Value) {
 		}
 
 		if t.Kind() == reflect.Ptr {
-			kv = reflect.ValueOf(&setVal).Convert(t)
+			kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
 		} else {
 			kv = reflect.ValueOf(setVal).Convert(t)
 		}
@@ -270,7 +264,11 @@ func  setSliceValue (v string, t reflect.Type,  target reflect.Value) {
 			setVal = 0
 		}
 
-		kv = reflect.ValueOf(setVal).Convert(t)
+		if t.Kind() == reflect.Ptr {
+			kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
+		} else {
+			kv = reflect.ValueOf(setVal).Convert(t)
+		}
 	case reflect.Float32, reflect.Float64:
 		setVal, err := parseFloat(v)
 		if err != nil {
@@ -278,20 +276,23 @@ func  setSliceValue (v string, t reflect.Type,  target reflect.Value) {
 		}
 
 		if t.Kind() == reflect.Ptr {
-			kv = reflect.ValueOf(&setVal).Convert(t)
+			kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
 		} else {
 			kv = reflect.ValueOf(setVal).Convert(t)
 		}
 	case reflect.String:
-		if t.Kind() == reflect.Ptr {
-			kv = reflect.ValueOf(&v)
-		} else {
-			kv = reflect.ValueOf(v)
+		if setVal, ok := v.(string); ok {
+			if t.Kind() == reflect.Ptr {
+				kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
+			} else {
+				kv = reflect.ValueOf(setVal)
+			}
 		}
 	case reflect.Interface:
 		setVal := parseInterface(v)
+
 		if t.Kind() == reflect.Ptr {
-			kv = reflect.ValueOf(&setVal).Convert(t)
+			kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
 		} else {
 			kv = reflect.ValueOf(setVal).Convert(t)
 		}
@@ -302,15 +303,14 @@ func  setSliceValue (v string, t reflect.Type,  target reflect.Value) {
 		}
 
 		if t.Kind() == reflect.Ptr {
-			kv = reflect.ValueOf(&setVal).Convert(t)
+			kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
 		} else {
 			kv = reflect.ValueOf(setVal).Convert(t)
 		}
 	default:
 		//其他类型暂时不处理
-		return
+		return kv
 	}
 
-	// 解析出最终的值，并赋值
-	target.Set(kv)
+	return kv
 }
