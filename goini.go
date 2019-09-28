@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -470,22 +469,15 @@ func parseLine(rowStr string) {
 		return
 	}
 
-	// 节匹配
-	// 只解析第一个符合规范的节名
-	regSection := regexp.MustCompile(`(?U)(\[.*\])`)
-
-	// 节点匹配
-	regNode := regexp.MustCompile(`.*=.*`)
-
 	//匹配节
-	if regSection.MatchString(rowStr) {
+	if rxFirstSection.MatchString(rowStr) {
 
-		rowStr = regSection.FindString(rowStr)
+		rowStr = rxFirstSection.FindString(rowStr)
 
 		parseSection(rowStr)
 
 		//匹配到节点
-	} else if regNode.MatchString(rowStr) {
+	} else if rxNode.MatchString(rowStr) {
 		parseProperty(rowStr)
 	}
 }
@@ -496,9 +488,7 @@ func parseLine(rowStr string) {
  */
 func parseSection(rowStr string) {
 
-	regTemp := regexp.MustCompile(`\s+|\[|\]|\*+`)
-
-	sectionName = regTemp.ReplaceAllString(rowStr, "")
+	sectionName = rxSection.ReplaceAllString(rowStr, "")
 
 	property = make(map[string]interface{}) // 重新初始化
 
@@ -586,10 +576,8 @@ func parsNodeName(keyName string) string {
 	keyName = strings.TrimSpace(keyName)
 
 	//是否含有连续的分隔符，如果有则替换成一个
-	tempReg := regexp.MustCompile(`(\.\.+)`)
-
-	if tempReg.MatchString(keyName) {
-		keyName = tempReg.ReplaceAllString(keyName, ".")
+	if rxSeparator.MatchString(keyName) {
+		keyName = rxSeparator.ReplaceAllString(keyName, ".")
 	}
 
 	return keyName
@@ -608,13 +596,10 @@ func parsNodeValue(valueStr string) string {
 	if strings.IndexAny(valueStr, "'") != -1 || strings.IndexAny(valueStr, "\"") != -1 {
 
 		//获取引号中的内容，只匹配一次
-		tempReg := regexp.MustCompile(`(?U)(".*"|'.*')`)
+		valueStr = rxQuotationStart.FindString(valueStr)
 
-		valueStr = tempReg.FindString(valueStr)
-
-		//
-		tempReg = regexp.MustCompile(`"|'`)
-		valueStr = tempReg.ReplaceAllString(valueStr, "")
+		// 是否后面还有引号
+		valueStr = rxQuotationEnd.ReplaceAllString(valueStr, "")
 
 		// 行内容含有注释信息，则截取掉
 	} else if strings.IndexAny(valueStr, "#") != -1 || strings.IndexAny(valueStr, ";") != -1 {
