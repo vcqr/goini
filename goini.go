@@ -496,8 +496,6 @@ func parseSection(rowStr string) {
 
 	if pos != -1 {
 
-		sectionName = string([]rune(sectionName))
-
 		child := sectionName[:pos]
 
 		parent := sectionName[pos+1:]
@@ -544,8 +542,6 @@ func parseProperty(rowStr string) {
 
 	if posEq != -1 {
 
-		rowStr = string([]rune(rowStr))
-
 		keyName := rowStr[:posEq]
 
 		valueStr := rowStr[posEq+1:]
@@ -554,7 +550,6 @@ func parseProperty(rowStr string) {
 		valueStr = parsNodeValue(valueStr)
 
 		// 处理连续的分隔符
-		keyName = string([]rune(keyName))
 		keyName = parsNodeName(keyName)
 
 		//设置属性
@@ -606,7 +601,6 @@ func parsNodeValue(valueStr string) string {
 
 		// 剔除注释后面的内容
 		posVal := strings.IndexAny(valueStr, "#")
-		valueStr = string([]rune(valueStr))
 
 		if posVal != -1 {
 			valueStr = valueStr[:posVal]
