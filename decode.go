@@ -1,6 +1,7 @@
 package goini
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strconv"
@@ -41,15 +42,29 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 			mapKey = tag
 		}
 
-		mapVal, _ := srcData[mapKey]
-
-		// 检查具体的类型是否指针
-		k := field.Type.Kind()
-		if k == reflect.Ptr {
-			k = field.Type.Elem().Kind()
+		mapVal, ok := srcData[mapKey]
+		if !ok {
+			mapKey = key + "." + mapKey
+			mapVal = srcData[key+"."+mapKey]
 		}
 
-		if kv := decodeValue(mapVal, field.Type); kv.IsValid() {
+		// 检查具体的类型是否指针
+		t := field.Type
+		k := t.Kind()
+		if k == reflect.Ptr {
+			k = t.Elem().Kind()
+		}
+
+		if t.String() == "json.RawMessage" {
+			if setVal, ok := mapVal.(string); ok {
+				tempV := reflect.ValueOf(json.RawMessage(setVal))
+				objV.Field(i).Set(tempV)
+			}
+
+			continue
+		}
+
+		if kv := decodeValue(mapVal, t); kv.IsValid() {
 			if tk == reflect.Ptr {
 				// 初始化指针
 				ptrKv := reflect.New(kv.Type())

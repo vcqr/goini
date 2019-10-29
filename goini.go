@@ -280,7 +280,7 @@ func (goini *Goini) GetStruct(key string, targetObj interface{}, args ...interfa
 	val := goini.Get(key, args...)
 
 	if valMap, ok := val.(map[string]interface{}); ok {
-		mapToStruct("", valMap, targetObj)
+		mapToStruct(key, valMap, targetObj)
 	}
 }
 
