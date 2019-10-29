@@ -304,31 +304,12 @@ func New() *Goini {
 		path = currentPath + defaultIni
 	}
 
-	// 文件是否存在
-	isFile, _ := PathExists(path)
-	if !isFile {
-		panic("goini error: application.ini file cannot be exists")
-	}
+	return Load(path)
 
-	config := &Goini{
-		filePath: path,
-	}
+}
 
-	// 初始化节
-	sections = make(map[string]interface{})
-
-	// 初始化节点属性
-	property = make(map[string]interface{})
-
-	sectionName = defaultName
-
-	sections[sectionName] = property
-
-	// 解析文件
-	parseFile(config.filePath)
-
-	return config
-
+func InitFlag(flagArg, defaultFile string) {
+	confPath = flag.String(flagArg, defaultFile, "conf path")
 }
 
 /**
@@ -358,7 +339,10 @@ func Load(path string) *Goini {
 	sections[sectionName] = property
 
 	// 解析文件
-	parseFile(config.filePath)
+	err := parseFile(config.filePath)
+	if err != nil {
+		panic("goini error: file parse error \r\n err:" + err.Error())
+	}
 
 	return config
 }
@@ -368,7 +352,9 @@ func Load(path string) *Goini {
  * @return string
  */
 func ArgConfigPath() string {
-	flag.Parse()
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 
 	path := *iniPath
 	if path != "" {
@@ -429,12 +415,11 @@ func GetCurrentPath() (string, error) {
  * 解析文件内容
  * @param filePath string 要解析的文件
  */
-func parseFile(filePath string) {
+func parseFile(filePath string) error {
 
 	fp, err := os.Open(filePath)
 	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return
+		return err
 	}
 
 	defer fp.Close()
@@ -453,6 +438,8 @@ func parseFile(filePath string) {
 		parseLine(rowStr)
 
 	}
+
+	return nil
 }
 
 /**
