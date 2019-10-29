@@ -581,7 +581,10 @@ func parsNodeValue(valueStr string) string {
 		valueStr = rxQuotationStart.FindString(valueStr)
 
 		// 是否后面还有引号
-		valueStr = rxQuotationEnd.ReplaceAllString(valueStr, "")
+		//valueStr = rxQuotationEnd.ReplaceAllString(valueStr, "")
+		if len(valueStr) > 0 {
+			valueStr = valueStr[1 : len(valueStr)-1]
+		}
 
 		// 行内容含有注释信息，则截取掉
 	} else if strings.IndexAny(valueStr, "#") != -1 || strings.IndexAny(valueStr, ";") != -1 {
