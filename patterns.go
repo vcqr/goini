@@ -11,6 +11,7 @@ const (
 	Separator      string = `(\.\.+)`         // key中是否含有连续的分隔符
 	QuotationStart string = `(?U)(".*"|'.*')` // 获取引号中的内容，只匹配一次
 	QuotationEnd   string = `"|'`             // 匹配单或双引号
+	Variate        string = `(?U)\$\{.*\}`    // 匹配变量
 )
 
 var (
@@ -20,4 +21,5 @@ var (
 	rxSeparator      = regexp.MustCompile(Separator)
 	rxQuotationStart = regexp.MustCompile(QuotationStart)
 	rxQuotationEnd   = regexp.MustCompile(QuotationEnd)
+	rxVariate        = regexp.MustCompile(Variate)
 )

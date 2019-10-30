@@ -57,6 +57,9 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 
 		if t.String() == "json.RawMessage" {
 			if setVal, ok := mapVal.(string); ok {
+
+				setVal = decodeVariable(setVal)
+
 				tempV := reflect.ValueOf(json.RawMessage(setVal))
 				objV.Field(i).Set(tempV)
 			}
@@ -135,6 +138,9 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 
 func parseInt(val interface{}) (int64, error) {
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
 			return int64(floatVal), nil
 		} else {
@@ -147,6 +153,9 @@ func parseInt(val interface{}) (int64, error) {
 
 func parseUint(val interface{}) (uint64, error) {
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
 			return uint64(floatVal), nil
 		} else {
@@ -159,6 +168,9 @@ func parseUint(val interface{}) (uint64, error) {
 
 func parseFloat(val interface{}) (float64, error) {
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
 			return floatVal, nil
 		} else {
@@ -175,6 +187,9 @@ func parseInterface(val interface{}) interface{} {
 
 func parseBool(val interface{}) (bool, error) {
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		// 补充一些常用的词
 		switch valStr {
 		case "y", "Y", "on", "ON", "On", "yes", "YES", "Yes", "enabled", "ENABLED", "Enabled":
@@ -193,6 +208,9 @@ func parseBool(val interface{}) (bool, error) {
 
 func parseSlice(val interface{}, t reflect.Type, delimiter string) (reflect.Value, error) {
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		strArr := strings.Split(valStr, delimiter)
 		iL := len(strArr)
 
@@ -233,6 +251,9 @@ func parseMap(val interface{}, t reflect.Type) (reflect.Value, error) {
 	if valMap, valMapOk := val.(map[string]interface{}); valMapOk {
 		for k, v := range valMap {
 			if vStr, ok := v.(string); ok {
+
+				vStr = decodeVariable(vStr)
+
 				if kv := decodeValue(vStr, t.Elem()); kv.IsValid() {
 					if t.Elem().Kind() == reflect.Ptr {
 						// 初始化指针
@@ -297,6 +318,9 @@ func decodeValue(v interface{}, t reflect.Type) reflect.Value {
 		}
 	case reflect.String:
 		if setVal, ok := v.(string); ok {
+
+			setVal = decodeVariable(setVal)
+
 			if t.Kind() == reflect.Ptr {
 				kv = reflect.ValueOf(&setVal).Elem().Convert(t.Elem())
 			} else {
@@ -328,4 +352,52 @@ func decodeValue(v interface{}, t reflect.Type) reflect.Value {
 	}
 
 	return kv
+}
+
+// 解析变量, 格式：${section:name1.name2}
+func decodeVariable(dest string) string {
+	varArr := rxVariate.FindAllString(dest, -1)
+	if len(varArr) == 0 {
+		return dest
+	}
+
+	for _, v := range varArr {
+		if len(v) >= 3 {
+			varName := v[2 : len(v)-1]
+
+			varVal := ""
+			posVal := strings.IndexAny(varName, ":")
+
+			if posVal != -1 {
+				// 获取含有section的数据
+				varVal = getString(varName[posVal+1:], varName[:posVal])
+			} else {
+				varVal = getString(varName, "")
+			}
+
+			// 替换为变量的值
+			if varVal != "" {
+				dest = strings.ReplaceAll(dest, v, varVal)
+			}
+		}
+	}
+
+	return dest
+}
+
+// 获取变量的值
+func getString(key, section string) string {
+	if section == "" || section == "<nil>" {
+		section = defaultName
+	}
+
+	if tempRet, ok := sections[section].(map[string]interface{}); ok {
+		if val, vOk := tempRet[key]; vOk {
+			if valStr, strOk := val.(string); strOk {
+				return valStr
+			}
+		}
+	}
+
+	return ""
 }

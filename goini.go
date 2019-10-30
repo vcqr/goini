@@ -180,6 +180,9 @@ func (goini *Goini) GetString(key string, args ...interface{}) string {
 	val := goini.Get(key, args...)
 
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		return valStr
 	}
 
@@ -191,6 +194,9 @@ func (goini *Goini) GetInt(key string, args ...interface{}) int64 {
 	val := goini.Get(key, args...)
 
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
 			return int64(floatVal)
 		}
@@ -204,6 +210,9 @@ func (goini *Goini) GetFloat(key string, args ...interface{}) float64 {
 	val := goini.Get(key, args...)
 
 	if valStr, ok := val.(string); ok {
+
+		valStr = decodeVariable(valStr)
+
 		if floatVal, err := strconv.ParseFloat(valStr, 64); err == nil {
 			return floatVal
 		}
