@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	FirstSection   string = `(?U)(\[.*\])`    // 节匹配 只解析第一个符合规范的节名
+	FirstSection   string = `^(?U)(\[.*\])`    // 节匹配 只解析第一个符合规范的节名
 	Section        string = `\s+|\[|\]|\*+`   // 节匹配
 	Node           string = `.*=.*`           // 节点匹配
 	Separator      string = `(\.\.+)`         // key中是否含有连续的分隔符
