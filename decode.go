@@ -377,7 +377,8 @@ func decodeVariable(dest string) string {
 
 			// 替换为变量的值
 			if varVal != "" {
-				dest = strings.ReplaceAll(dest, v, varVal)
+				// go version < 1.11 不支持string.ReplaceAll()
+				dest = strings.Replace(dest, v, varVal, -1)
 			}
 		}
 	}
