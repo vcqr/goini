@@ -206,26 +206,88 @@ func parseBool(val interface{}) (bool, error) {
 	return false, errors.New("goini: string assert error")
 }
 
+// 解析切片
 func parseSlice(val interface{}, t reflect.Type, delimiter string) (reflect.Value, error) {
 	if valStr, ok := val.(string); ok {
+		return parseStringToSlice(valStr, t, delimiter)
+	} else {
+		return parseSliceSlice(val, t)
+	}
 
-		valStr = decodeVariable(valStr)
+	return reflect.MakeSlice(t, 0, 0), errors.New("goini: string assert error")
+}
 
-		strArr := strings.Split(valStr, delimiter)
-		iL := len(strArr)
+// 字符串解析为切片
+func parseStringToSlice(valStr string, t reflect.Type, delimiter string) (reflect.Value, error) {
+	valStr = decodeVariable(valStr)
 
-		// 初始化切片
+	strArr := strings.Split(valStr, delimiter)
+	iL := len(strArr)
+	// 初始化切片
+	arr := reflect.MakeSlice(t, iL, iL)
+
+	if iL > 0 {
+		var indexT reflect.Type
+		for i := 0; i < arr.Len(); i++ {
+			if indexT == nil {
+				indexT = arr.Index(i).Type()
+			}
+
+			// 根据具体的类型设置对应的值
+			if kv := decodeValue(strArr[i], indexT); kv.IsValid() {
+				if indexT.Kind() == reflect.Ptr {
+					// 初始化指针
+					ptrKv := reflect.New(kv.Type())
+					ptrKv.Elem().Set(kv)
+
+					arr.Index(i).Set(ptrKv)
+				} else {
+					arr.Index(i).Set(kv)
+				}
+			}
+		}
+	}
+
+	return arr, nil
+}
+
+// 解析map格式的切片
+func parseSliceSlice(val interface{}, t reflect.Type) (reflect.Value, error) {
+	if arrVal, ok := val.([]interface{}); ok {
+		iL := len(arrVal)
+
+		if t.Kind() != reflect.Slice {
+			return reflect.ValueOf(nil), errors.New("goini: target type is not reflect.Slice, that is " + t.Kind().String())
+		}
+
 		arr := reflect.MakeSlice(t, iL, iL)
 
-		if iL > 0 {
-			var indexT reflect.Type
-			for i := 0; i < arr.Len(); i++ {
-				if indexT == nil {
-					indexT = arr.Index(i).Type()
-				}
+		var indexT reflect.Type
+		for i := 0; i < arr.Len(); i++ {
+			if indexT == nil {
+				indexT = arr.Index(i).Type()
+			}
 
+			tempObj := arrVal[i]
+			if arrValMap, ok := tempObj.(map[string]interface{}); ok {
+				if indexT.Kind() == reflect.Ptr {
+					valTemp := reflect.New(indexT.Elem())
+					nextVal := valTemp.Interface()
+
+					mapToStruct("", arrValMap, nextVal)
+
+					arr.Index(i).Set(valTemp)
+
+				} else {
+					valTemp := reflect.New(indexT)
+					nextVal := valTemp.Interface()
+
+					mapToStruct("", arrValMap, nextVal)
+					arr.Index(i).Set(valTemp.Elem())
+				}
+			} else if strVal, ok := tempObj.(string); ok {
 				// 根据具体的类型设置对应的值
-				if kv := decodeValue(strArr[i], indexT); kv.IsValid() {
+				if kv := decodeValue(strVal, indexT); kv.IsValid() {
 					if indexT.Kind() == reflect.Ptr {
 						// 初始化指针
 						ptrKv := reflect.New(kv.Type())
@@ -236,13 +298,20 @@ func parseSlice(val interface{}, t reflect.Type, delimiter string) (reflect.Valu
 						arr.Index(i).Set(kv)
 					}
 				}
+			} else if arrVal, ok := tempObj.([]interface{}); ok {
+				retSlice, err := parseSliceSlice(arrVal, indexT)
+				if err != nil {
+					panic(err.Error())
+				}
+
+				arr.Index(i).Set(retSlice)
 			}
 		}
 
 		return arr, nil
 	}
 
-	return reflect.MakeSlice(t, 0, 0), errors.New("goini: string assert error")
+	return reflect.MakeSlice(t, 0, 0), errors.New("goini: parseSliceSlice slice assert error")
 }
 
 func parseMap(val interface{}, t reflect.Type) (reflect.Value, error) {

@@ -56,6 +56,7 @@ type Config interface {
 
 type Goini struct {
 	filePath string
+	Syntax   string
 }
 
 // 默认ini文件
@@ -81,6 +82,17 @@ const defaultName = "default"
 
 // 记录当前节名
 var sectionName string
+
+var syntaxMap = map[string]string{
+	"yaml": "yml",
+	"yml":  "yml",
+	"YAML": "yml",
+	"YML":  "yml",
+
+	"ini":  "ini",
+	"conf": "ini",
+	"":     "ini",
+}
 
 /**
  * 默认节点取值
@@ -297,7 +309,7 @@ func (goini *Goini) GetStruct(key string, targetObj interface{}, args ...interfa
  * 构造对象
  * @return *Goini
  */
-func New() *Goini {
+func New(syntax string) *Goini {
 	var path string
 
 	// 命令行 获取文件
@@ -313,7 +325,7 @@ func New() *Goini {
 		path = currentPath + defaultIni
 	}
 
-	return Load(path)
+	return Load(path, syntax)
 
 }
 
@@ -326,7 +338,7 @@ func InitFlag(flagArg, defaultFile string) {
  * @param path string 文件路径
  * @return *Goini
  */
-func Load(path string) *Goini {
+func Load(path, syntax string) *Goini {
 	// 文件是否存在
 	isFile, _ := PathExists(path)
 	if !isFile {
@@ -348,7 +360,7 @@ func Load(path string) *Goini {
 	sections[sectionName] = property
 
 	// 解析文件
-	err := parseFile(config.filePath)
+	err := parseFile(config.filePath, syntax)
 	if err != nil {
 		panic("goini error: file parse error \r\n err:" + err.Error())
 	}
@@ -424,7 +436,7 @@ func GetCurrentPath() (string, error) {
  * 解析文件内容
  * @param filePath string 要解析的文件
  */
-func parseFile(filePath string) error {
+func parseFile(filePath, syntax string) error {
 
 	fp, err := os.Open(filePath)
 	if err != nil {
@@ -442,11 +454,18 @@ func parseFile(filePath string) error {
 			break
 		}
 
-		rowStr := string(row)
-
-		parseLine(rowStr)
+		targetSyntax := syntaxMap[syntax]
+		if targetSyntax == "yml" {
+			parseYamlLine(row)
+		} else {
+			rowStr := string(row)
+			parseLine(rowStr)
+		}
 
 	}
+
+	property = nil
+	lineNode = LineNode{}
 
 	return nil
 }
@@ -623,7 +642,7 @@ func parsNodeValue(valueStr string) string {
  * @param keyName string 节点名
  * @param valueStr string 节点值
  */
-func setProperty(keyName string, valueStr string) {
+func setProperty(keyName string, valueStr interface{}) {
 
 	if strings.IndexAny(keyName, ".") != -1 {
 
