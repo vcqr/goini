@@ -154,15 +154,7 @@ func (goini *Goini) GetSection(section string) map[string]interface{} {
  * @return interface{} 混合类型内容
  */
 func (goini *Goini) getValBySection(key string, section string) interface{} {
-	if section == "" || section == "<nil>" {
-		section = defaultName
-	}
-
-	if tempRet, ok := sections[section].(map[string]interface{}); ok {
-		return tempRet[key]
-	}
-
-	return nil
+	return getValBySection(key, section)
 }
 
 /**
@@ -567,6 +559,28 @@ func parseProperty(rowStr string) {
 		// 处理连续的分隔符
 		keyName = parsNodeName(keyName)
 
+		// 处理变量引用
+		if strings.HasPrefix(valueStr, "${") {
+			if parseVariate(keyName, valueStr) {
+				return
+			}
+		}
+
+		// 处理数组
+		if strings.HasPrefix(valueStr, "[") {
+			strArr := findSliceString(valueStr)
+			if len(strArr) > 0 {
+				retSlice := parseSliceRow(valueStr, 0)
+
+				//设置属性
+				setProperty(keyName, retSlice)
+				//设置值
+				property[keyName] = retSlice
+
+				return
+			}
+		}
+
 		//设置属性
 		setProperty(keyName, valueStr)
 
@@ -574,6 +588,40 @@ func parseProperty(rowStr string) {
 		property[keyName] = valueStr
 
 	}
+}
+
+// 解析变量
+func parseVariate(keyName, valueStr string) bool {
+	pos := strings.Index(valueStr, "}")
+	if pos+1 >= len(valueStr) {
+		varStr := rxVariate.FindString(valueStr)
+		if varStr != "" && len(varStr) > 3 {
+			// 取变量中的值${xxx.xx} => xxx.xx
+			quoteKey := varStr[2 : len(varStr)-1]
+
+			var mixVal interface{}
+			colonPos := strings.Index(quoteKey, ":")
+
+			if colonPos > 0 {
+				fmt.Println(quoteKey[colonPos+1:], quoteKey[:colonPos])
+				mixVal = getValBySection(quoteKey[colonPos+1:], quoteKey[:colonPos])
+			} else {
+				mixVal = getValBySection(quoteKey, "")
+			}
+
+			// 设置属性
+			setProperty(keyName, mixVal)
+
+			// 设置值
+			property[keyName] = mixVal
+
+			return true
+		}
+
+		return false
+	}
+
+	return false
 }
 
 /**
@@ -730,4 +778,17 @@ func GetSection(sectionKey string) map[string]interface{} {
 	json.Unmarshal([]byte(jsonStr), &property)
 
 	return property
+}
+
+// 获取节点内容
+func getValBySection(key string, section string) interface{} {
+	if section == "" || section == "<nil>" {
+		section = defaultName
+	}
+
+	if tempRet, ok := sections[section].(map[string]interface{}); ok {
+		return tempRet[key]
+	}
+
+	return nil
 }
