@@ -551,10 +551,10 @@ func parseProperty(rowStr string) {
 
 		keyName := rowStr[:posEq]
 
-		valueStr := rowStr[posEq+1:]
+		valueStrRow := rowStr[posEq+1:]
 
 		// 处理等号后面的值
-		valueStr = parsNodeValue(valueStr)
+		valueStr := parsNodeValue(valueStrRow)
 
 		// 处理连续的分隔符
 		keyName = parsNodeName(keyName)
@@ -567,10 +567,11 @@ func parseProperty(rowStr string) {
 		}
 
 		// 处理数组
-		if strings.HasPrefix(valueStr, "[") {
-			strArr := findSliceString(valueStr)
+		valueStrRow = strings.TrimSpace(valueStrRow)
+		if strings.HasPrefix(valueStrRow, "[") {
+			strArr := findSliceString(valueStrRow)
 			if len(strArr) > 0 {
-				retSlice := parseSliceRow(valueStr, 0)
+				retSlice := parseSliceRow(valueStrRow, 0)
 
 				//设置属性
 				setProperty(keyName, retSlice)
