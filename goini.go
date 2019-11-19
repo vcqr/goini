@@ -92,6 +92,9 @@ var syntaxMap = map[string]string{
 	"ini":  "ini",
 	"conf": "ini",
 	"":     "ini",
+
+	"toml": "toml",
+	"TOML": "toml",
 }
 
 /**
@@ -449,6 +452,8 @@ func parseFile(filePath, syntax string) error {
 		targetSyntax := syntaxMap[syntax]
 		if targetSyntax == "yml" {
 			parseYamlLine(row)
+		} else if targetSyntax == "toml" {
+			parseTomlLine(row)
 		} else {
 			rowStr := string(row)
 			parseLine(rowStr)
