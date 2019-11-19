@@ -293,54 +293,6 @@ func parseFlowRow(keyName, valStr string, depth int) {
 	}
 }
 
-// 找出匹配flow格式的字符串，只匹配第一层
-func findFlowString(str string) []string {
-	strB := []byte(str)
-
-	var tempB []byte
-	var retArr []string
-
-	// 哨兵
-	guard := 0
-
-	for _, v := range strB {
-		if v == 123 {
-			guard++ // 放置哨兵
-			tempB = append(tempB, v)
-			continue
-		}
-
-		if v == 125 {
-			guard-- // 清除哨兵
-			tempB = append(tempB, v)
-			if guard == 0 {
-				retArr = append(retArr, string(tempB))
-				//重置空
-				tempB = []byte{}
-			}
-			continue
-		}
-
-		if guard > 0 {
-			tempB = append(tempB, v)
-		}
-	}
-
-	if guard > 0 {
-		panic(" '}' Symbol mismatch")
-	}
-
-	if guard < 0 {
-		panic(" '{' Symbol mismatch")
-	}
-
-	// 回收临时变量
-	tempB = []byte{}
-	strB = []byte{}
-
-	return retArr
-}
-
 // 解析flow格式数据
 func parseSliceRow(valStr string, depth int) []interface{} {
 	strLen := len(valStr)
@@ -373,8 +325,17 @@ func parseSliceRow(valStr string, depth int) []interface{} {
 	return retSlice
 }
 
+// 找出匹配flow格式的字符串，只匹配第一层
+func findFlowString(str string) []string {
+	return findClosureValue(str, 123, 125, "}", "{")
+}
+
 // 找出数组格式数据
 func findSliceString(str string) []string {
+	return findClosureValue(str, 91, 93, "]", "[")
+}
+
+func findClosureValue(str string, start, end byte, endSymbol, startSymbol string) []string {
 	strB := []byte(str)
 
 	var tempB []byte
@@ -384,13 +345,13 @@ func findSliceString(str string) []string {
 	guard := 0
 
 	for _, v := range strB {
-		if v == 91 {
+		if v == start {
 			guard++ // 放置哨兵
 			tempB = append(tempB, v)
 			continue
 		}
 
-		if v == 93 {
+		if v == end {
 			guard-- // 清除哨兵
 			tempB = append(tempB, v)
 			if guard == 0 {
@@ -407,11 +368,11 @@ func findSliceString(str string) []string {
 	}
 
 	if guard > 0 {
-		panic(" ']' Symbol mismatch")
+		panic(" '" + endSymbol + "' Symbol mismatch")
 	}
 
 	if guard < 0 {
-		panic(" '[' Symbol mismatch")
+		panic(" '" + startSymbol + "' Symbol mismatch")
 	}
 
 	// 回收临时变量
