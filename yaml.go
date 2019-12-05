@@ -310,6 +310,7 @@ func parseSliceRow(valStr string, depth int) []interface{} {
 
 	var retSlice []interface{}
 
+	valStr = strings.TrimRight(valStr, ",")
 	strArr := strings.Split(valStr, ",")
 	for _, valStr := range strArr {
 		valStr = strings.TrimSpace(valStr)

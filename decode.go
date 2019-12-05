@@ -33,7 +33,8 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 		tk := field.Type.Kind()
 
 		mapKey := field.Name
-		tag, _ := parseTag(field.Tag.Get("json"), ",")
+		tag, option := parseTag(field.Tag.Get("json"), ",")
+
 		if tag == "-" {
 			continue
 		}
@@ -107,6 +108,15 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 
 			objV.Field(i).Set(setVal)
 		default:
+			if key == "" {
+				mapKey = strings.ToLower(objV.Type().Name()) + "." + mapKey
+			}
+
+			nextData := srcData[mapKey]
+			if nextData == nil && option == "omitempty" {
+				continue
+			}
+
 			if objV.IsValid() {
 				value := objV.Field(i)
 				val := value.Interface()
@@ -119,12 +129,6 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 				} else if value.Kind() == reflect.Struct {
 					val = value.Addr().Interface()
 				}
-
-				if key == "" {
-					mapKey = strings.ToLower(objV.Type().Name()) + "." + mapKey
-				}
-
-				nextData := srcData[mapKey]
 
 				if nextMap, ok := nextData.(map[string]interface{}); ok {
 					mapToStruct(mapKey, nextMap, val)
@@ -344,6 +348,10 @@ func parseMap(val interface{}, t reflect.Type) (reflect.Value, error) {
 
 func decodeValue(v interface{}, t reflect.Type) reflect.Value {
 	var kv reflect.Value
+
+	if v == nil {
+		return kv
+	}
 
 	// 检查具体的类型
 	k := t.Kind()
