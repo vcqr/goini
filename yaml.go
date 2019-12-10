@@ -314,6 +314,8 @@ func parseSliceRow(valStr string, depth int) []interface{} {
 	strArr := strings.Split(valStr, ",")
 	for _, valStr := range strArr {
 		valStr = strings.TrimSpace(valStr)
+		valStr = TrimQuote(valStr)
+
 		if val, ok := tempMap[valStr]; ok {
 			nextVal := parseSliceRow(val, depth+1)
 			retSlice = append(retSlice, nextVal)

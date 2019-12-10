@@ -609,7 +609,7 @@ func parseVariate(keyName, valueStr string) bool {
 			colonPos := strings.Index(quoteKey, ":")
 
 			if colonPos > 0 {
-				fmt.Println(quoteKey[colonPos+1:], quoteKey[:colonPos])
+				// fmt.Println(quoteKey[colonPos+1:], quoteKey[:colonPos])
 				mixVal = getValBySection(quoteKey[colonPos+1:], quoteKey[:colonPos])
 			} else {
 				mixVal = getValBySection(quoteKey, "")

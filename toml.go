@@ -190,24 +190,49 @@ func parseKv(rowStr string) {
 		valueStrRow := rowStr[posEq+1:]
 		// 处理 """ 行
 		trimStr := strings.TrimSpace(valueStrRow)
+		trimStrComment := RemoveComments(trimStr)
+		trimStrQuote := TrimQuote(trimStrComment)
+
+		newKeyName := tomlLineNode.KeyName + "." + keyName
+
+		// 表格数组
+		if tomlLineNode.Operate == OpArrayTable || tomlLineNode.Operate == OpArrayTableChild {
+			// 处理内联表
+			var rowVal interface{}
+			if v, ok := parseMapValue(newKeyName, trimStr); ok {
+				rowVal = v
+			}
+
+			// 处理数组
+			if v, ok := parseSliceValue(trimStr); ok {
+				rowVal = v
+			}
+
+			if rowVal == nil {
+				rowVal = trimStrQuote
+			}
+
+			setArrayTable(tomlLineNode.KeyName, keyName, rowVal)
+			return
+		}
 
 		// string 单行
-		if (strings.HasPrefix(trimStr, "\"\"\"") && strings.HasSuffix(trimStr, "\"\"\"")) ||
-			(strings.HasPrefix(trimStr, "'''") && strings.HasSuffix(trimStr, "'''")) {
+		if (strings.HasPrefix(trimStrComment, "\"\"\"") && strings.HasSuffix(trimStrComment, "\"\"\"")) ||
+			(strings.HasPrefix(trimStrComment, "'''") && strings.HasSuffix(trimStrComment, "'''")) {
 
-			strLen := len(trimStr)
+			strLen := len(trimStrComment)
 			if strLen > 6 {
 				keyName = tomlLineNode.ParentKey + "." + keyName
-				setTomlGlobalMapValue(keyName, trimStr[3:len(trimStr)-3])
+				setTomlGlobalMapValue(keyName, trimStrComment[3:len(trimStrComment)-3])
 				tomlLineNode.Operate = ""
 				return
 			}
 		}
 
 		// string 多行
-		if strings.HasPrefix(trimStr, "\"\"\"") || strings.HasPrefix(trimStr, "'''") {
+		if strings.HasPrefix(trimStrComment, "\"\"\"") || strings.HasPrefix(trimStrComment, "'''") {
 			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
-			if len(trimStr) > 3 {
+			if len(trimStrComment) > 3 {
 				tomlLineNode.Operate = OpInLine
 			} else {
 				tomlLineNode.Operate = OpNewLine
@@ -226,52 +251,55 @@ func parseKv(rowStr string) {
 			return
 		}
 
-		// 表格数组
-		if tomlLineNode.Operate == OpArrayTable || tomlLineNode.Operate == OpArrayTableChild {
-			// 设置数组表格
-			setArrayTable(tomlLineNode.KeyName, keyName, valueStr)
-
+		// 处理内联表
+		if v, ok := parseMapValue(newKeyName, trimStrComment); ok {
+			setTomlGlobalMapValue(newKeyName, v)
 			return
 		}
 
-		newKeyName := tomlLineNode.KeyName + "." + keyName
-
-		// 处理内联表
-		if strings.HasPrefix(trimStr, "{") {
-			flowStr := rxYamlFlow.FindString(trimStr)
-
-			if strings.Index(flowStr, "=") != -1 {
-				parseInlineRow(newKeyName, flowStr, 0)
-				return
-			}
-		}
-
 		// 处理变量引用
-		if strings.HasPrefix(valueStr, "${") {
-			if parseVariate(newKeyName, valueStr) {
+		if strings.HasPrefix(trimStrComment, "${") {
+			if parseVariate(newKeyName, trimStrComment) {
 				return
 			}
 		}
 
 		// 处理数组
-		valueStrRow = strings.TrimSpace(valueStrRow)
-		if strings.HasPrefix(valueStrRow, "[") {
-			strArr := findSliceString(valueStrRow)
-			if len(strArr) > 0 {
-				retSlice := parseSliceRow(valueStrRow, 0)
-
-				setTomlGlobalMapValue(newKeyName, retSlice)
-
-				return
-			}
+		if v, ok := parseSliceValue(trimStrComment); ok {
+			setTomlGlobalMapValue(newKeyName, v)
+			return
 		}
 
-		setTomlGlobalMapValue(newKeyName, valueStr)
+		// 无特殊情况数值
+		setTomlGlobalMapValue(newKeyName, trimStrQuote)
 	}
 }
 
+// 解析素组类型的值
+func parseSliceValue(lineValue string) (interface{}, bool) {
+	if strings.HasPrefix(lineValue, "[") {
+		strArr := findSliceString(lineValue)
+		if len(strArr) > 0 {
+			return parseSliceRow(lineValue, 0), true
+		}
+	}
+
+	return nil, false
+}
+
+// 解析内敛表类型的值
+func parseMapValue(keyName, lineValue string) (interface{}, bool) {
+	if strings.HasPrefix(lineValue, "{") && strings.HasSuffix(lineValue, "}") {
+		if strings.Index(lineValue, "=") != -1 {
+			return parseInlineRow(keyName, lineValue, 0, nil), true
+		}
+	}
+
+	return nil, false
+}
+
 // 解析嵌套数组表格
-func parseArrayTable(rootKey, currentKey string, valueStr string, keyDepth, depth int, obj interface{}, keyArr []string) interface{} {
+func parseArrayTable(rootKey, currentKey string, valueStr interface{}, keyDepth, depth int, obj interface{}, keyArr []string) interface{} {
 	if obj == nil {
 		if depth == 0 {
 			tempRootKey := keyArr[depth]
@@ -501,7 +529,7 @@ func JoinIndex(keyName string) {
 }
 
 // 设置数组表格
-func setArrayTable(keyName, valueKey, valueStr string) {
+func setArrayTable(keyName, valueKey string, valueStr interface{}) {
 	keyArr := strings.Split(keyName, ".")
 	obj := parseArrayTable(keyName, valueKey, valueStr, len(keyArr)-1, 0, nil, keyArr)
 
@@ -514,7 +542,11 @@ func setArrayTable(keyName, valueKey, valueStr string) {
 }
 
 // 解析flow格式数据
-func parseInlineRow(keyName, valStr string, depth int) {
+func parseInlineRow(keyName, valStr string, depth int, mp map[string]interface{}) map[string]interface{} {
+	if mp == nil {
+		mp = make(map[string]interface{})
+	}
+
 	strLen := len(valStr)
 	valStr = valStr[1 : strLen-1]
 
@@ -528,25 +560,32 @@ func parseInlineRow(keyName, valStr string, depth int) {
 		}
 	}
 
+	oldMp := mp[keyName]
+	if oldMp == nil {
+		oldMp = make(map[string]interface{})
+		mp[keyName] = oldMp
+	}
+
 	strArr := strings.Split(valStr, ",")
+	if m, ok := oldMp.(map[string]interface{}); ok {
+		for _, kvStr := range strArr {
+			pos := strings.Index(kvStr, "=")
+			if pos != -1 {
+				k, v := strings.TrimSpace(kvStr[:pos]), strings.TrimSpace(kvStr[pos+1:])
 
-	for _, kvStr := range strArr {
-		pos := strings.Index(kvStr, "=")
-		if pos != -1 {
-			k, v := strings.TrimSpace(kvStr[:pos]), strings.TrimSpace(kvStr[pos+1:])
+				v = TrimQuote(v)
+				//nextKey := keyName + "." + k
+				if nextV, ok := tempMap[v]; ok {
+					parseInlineRow(k, nextV, depth+1, m)
+					continue
+				}
 
-			nextKey := keyName + "." + k
-			if nextV, ok := tempMap[v]; ok {
-				parseInlineRow(nextKey, nextV, depth+1)
-
-				continue
+				m[k] = v
 			}
-
-			v = TrimQuote(v)
-
-			setTomlGlobalMapValue(keyName+"."+k, v)
 		}
 	}
+
+	return mp
 }
 
 // 去除首尾引号
@@ -558,11 +597,13 @@ func TrimQuote(dest string) string {
 		return dest
 	}
 
+	// 去掉 " 引号
 	if destB[0] == 34 && destB[strLen-1] == 34 {
 		destB = destB[1 : strLen-1]
 		return string(destB)
 	}
 
+	// 去掉 ' 引号
 	if destB[0] == 39 && destB[strLen-1] == 39 {
 		destB = destB[1 : strLen-1]
 		return string(destB)
@@ -571,10 +612,76 @@ func TrimQuote(dest string) string {
 	return string(destB)
 }
 
-// 去除key后面的注释
+// 获取引号符号情况下的注释开始位置
+func GetQuoteCommentIndex(destB []byte, target, char byte) int {
+	num := 0
+	pos := -1
+	for idx, v := range destB {
+		if v == char {
+			num++
+		}
+
+		if v == target {
+			pos = idx
+
+			if num&1 == 0 {
+				break
+			}
+		}
+	}
+
+	return pos
+}
+
+// 获取闭合符号情况下的注释开始位置
+func GetClosedCommentIndex(destB []byte, target, start, end byte) int {
+	pos := -1
+
+	// 哨兵
+	guard := 0
+	for idx, v := range destB {
+		if v == start {
+			guard++ // 放置哨兵
+		}
+
+		if v == end {
+			guard-- // 清除哨兵
+		}
+
+		if v == target {
+			pos = idx
+			if guard == 0 {
+				break
+			}
+		}
+	}
+
+	return pos
+}
+
+// 去除注释
 func RemoveComments(dest string) string {
-	pos := strings.IndexAny(dest, "#")
-	if pos > 0 {
+	if dest == "" {
+		return ""
+	}
+
+	pos := -1
+
+	destB := []byte(dest)
+	switch destB[0] {
+	case 34:
+		pos = GetQuoteCommentIndex(destB, 35, 34)
+	case 39:
+		pos = GetQuoteCommentIndex(destB, 35, 39)
+	case 91:
+		pos = GetClosedCommentIndex(destB, 35, 91, 93)
+	case 123:
+		pos = GetClosedCommentIndex(destB, 35, 123, 125)
+	default:
+		pos = GetQuoteCommentIndex(destB, 35, 34)
+	}
+
+	if pos > -1 {
 		return strings.TrimSpace(dest[:pos])
 	}
 
