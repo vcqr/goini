@@ -793,8 +793,40 @@ func getValBySection(key string, section string) interface{} {
 	}
 
 	if tempRet, ok := sections[section].(map[string]interface{}); ok {
-		return tempRet[key]
+		if mp, ok := tempRet[key]; ok {
+			return mp
+		} else {
+			keyArr := strings.Split(key, ".")
+			return getMapVal(keyArr, tempRet, 0)
+		}
 	}
 
 	return nil
+}
+
+func getMapVal(keyArr []string, nextMap interface{}, depth int) interface{} {
+	if nextMap == nil {
+		return nextMap
+	}
+
+	newKeyArr := keyArr[:depth+1]
+	nextKey := strings.Join(newKeyArr, ".")
+	currentKey := keyArr[depth]
+	arrLen := len(keyArr)
+
+	var ret interface{}
+	if mp, ok := nextMap.(map[string]interface{}); ok {
+		if arrLen-1 == depth {
+			ret = mp[currentKey]
+		} else {
+			v := mp[currentKey]
+			if v == nil {
+				v = mp[nextKey]
+			}
+
+			ret = getMapVal(keyArr, v, depth+1)
+		}
+	}
+
+	return ret
 }

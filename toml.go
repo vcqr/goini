@@ -253,13 +253,13 @@ func parseKv(rowStr string) {
 
 		// 处理内联表
 		if v, ok := parseMapValue(newKeyName, trimStrComment); ok {
-			setTomlGlobalMapValue(newKeyName, v)
+			setTomlGlobalMapValue(tomlLineNode.KeyName, v)
 			return
 		}
 
 		// 处理变量引用
-		if strings.HasPrefix(trimStrComment, "${") {
-			if parseVariate(newKeyName, trimStrComment) {
+		if strings.HasPrefix(trimStrQuote, "${") {
+			if parseVariate(newKeyName, trimStrQuote) {
 				return
 			}
 		}
