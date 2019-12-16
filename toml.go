@@ -79,7 +79,7 @@ func parseTomlLine(rowB []byte) {
 	}
 
 	// 解析[xxx]行
-	if strings.HasPrefix(trimStr, "[") && strings.HasSuffix(trimStr, "]") {
+	if strings.HasPrefix(trimStr, "[") && strings.HasSuffix(trimStr, "]") && tomlLineNode.Operate != OpInLine {
 		parseTomlArrayLine()
 
 		strArr := findSliceString(trimStr)
@@ -105,43 +105,57 @@ func parseTomlLine(rowB []byte) {
 	}
 
 	// 解析line
-	if rxNode.MatchString(rowStr) {
+	if rxNode.MatchString(rowStr) && tomlLineNode.Operate != OpInLine && tomlLineNode.Operate != OpNewLine {
 		parseTomlArrayLine()
 
 		parseKv(trimStr)
 	} else {
+		trimStr := strings.TrimSpace(rowStr)
+		trimStrComment := RemoveComments(trimStr)
+		trimStrQuote := TrimQuote(trimStrComment)
+
 		if trimStr == "\"\"\"" || trimStr == "'''" {
 			stringSetAndReset()
 			return
 		} else {
 			if tomlLineNode.Operate == OpInLine {
-				if strings.HasSuffix(trimStr, "\"\"\"") || strings.HasSuffix(trimStr, "'''") {
-					tomlLineNode.Data += trimStr[:len(trimStr)-3]
+				if strings.HasSuffix(trimStrComment, "\"\"\"") || strings.HasSuffix(trimStrComment, "'''") {
+					tomlLineNode.Data += trimStrComment[:len(trimStrComment)-3]
 
 					stringSetAndReset()
 
 					return
+				} else if trimStrQuote == "]" {
+					tomlLineNode.Data += trimStrQuote
+					tomlLineNode.Operate = OpArrayLine
+
+					parseTomlArrayLine()
 				} else {
-					trimStr = strings.TrimRight(trimStr, "\\")
-					tomlLineNode.Data += trimStr
+					if strings.HasSuffix(trimStrQuote, "\\") {
+						trimStr = strings.TrimRight(trimStrQuote, "\\")
+						tomlLineNode.Data += trimStr
+					} else {
+						tomlLineNode.Data += trimStrQuote + "\n"
+						tomlLineNode.Operate = OpNewLine
+					}
 				}
 			}
 
 			if tomlLineNode.Operate == OpNewLine {
-				if strings.HasSuffix(trimStr, "\"\"\"") || strings.HasSuffix(trimStr, "'''") {
-					tomlLineNode.Data += trimStr[:len(trimStr)-3]
+				if strings.HasSuffix(trimStrComment, "\"\"\"") || strings.HasSuffix(trimStrComment, "'''") {
+					tomlLineNode.Data += trimStrComment[:len(trimStrComment)-3]
 
 					stringSetAndReset()
 
 					return
 				} else {
 					// 保持原格式
-					tomlLineNode.Data += rowStr + "\n"
+					tomlLineNode.Data += trimStrComment + "\n"
 				}
 			}
 
 			if tomlLineNode.Operate == OpArrayLine {
-				tomlLineNode.Data += trimStr
+				tomlLineNode.Data += trimStrComment
 			}
 		}
 	}
@@ -158,17 +172,14 @@ func stringSetAndReset() {
 func parseTomlArrayLine() {
 	if tomlLineNode.Operate == OpArrayLine {
 		strArr := findSliceString(tomlLineNode.Data)
-
 		if len(strArr) > 0 {
-			retSlice := parseSliceRow(tomlLineNode.Data, 0)
+			retSlice := parseInlineSliceRow(tomlLineNode.KeyName, tomlLineNode.Data, 0)
 			setTomlGlobalMapValue(tomlLineNode.KeyName, retSlice)
-
-			return
 		}
 
 		// 重置
 		tomlLineNode.Data = ""
-		tomlLineNode.KeyName = ""
+		tomlLineNode.KeyName = tomlLineNode.ParentKey
 		tomlLineNode.Operate = ""
 	}
 }
@@ -199,12 +210,12 @@ func parseKv(rowStr string) {
 		if tomlLineNode.Operate == OpArrayTable || tomlLineNode.Operate == OpArrayTableChild {
 			// 处理内联表
 			var rowVal interface{}
-			if v, ok := parseMapValue(newKeyName, trimStr); ok {
+			if v, ok := parseMapValue(keyName, trimStr); ok {
 				rowVal = v
 			}
 
 			// 处理数组
-			if v, ok := parseSliceValue(trimStr); ok {
+			if v, ok := parseSliceValue(newKeyName, trimStr); ok {
 				rowVal = v
 			}
 
@@ -232,28 +243,27 @@ func parseKv(rowStr string) {
 		// string 多行
 		if strings.HasPrefix(trimStrComment, "\"\"\"") || strings.HasPrefix(trimStrComment, "'''") {
 			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
-			if len(trimStrComment) > 3 {
+			if len(trimStrComment) >= 3 {
 				tomlLineNode.Operate = OpInLine
-			} else {
-				tomlLineNode.Operate = OpNewLine
 			}
+			//} else {
+			//	tomlLineNode.Operate = OpNewLine
+			//}
 
 			return
 		}
 
 		// 处理数组换行
-		valueStr := parsNodeValue(valueStrRow)
-
-		if valueStr == "[" {
+		if strings.HasPrefix(trimStrQuote, "[") && !strings.HasSuffix(trimStrQuote, "]") {
 			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
-			tomlLineNode.Operate = OpArrayLine
-			tomlLineNode.Data = valueStr
+			tomlLineNode.Operate = OpInLine
+			tomlLineNode.Data = trimStrQuote
 			return
 		}
 
 		// 处理内联表
-		if v, ok := parseMapValue(newKeyName, trimStrComment); ok {
-			setTomlGlobalMapValue(tomlLineNode.KeyName, v)
+		if v, ok := parseMapValue(tomlLineNode.KeyName, trimStrComment); ok {
+			setTomlGlobalMapValue(newKeyName, v)
 			return
 		}
 
@@ -265,7 +275,7 @@ func parseKv(rowStr string) {
 		}
 
 		// 处理数组
-		if v, ok := parseSliceValue(trimStrComment); ok {
+		if v, ok := parseSliceValue(newKeyName, trimStrComment); ok {
 			setTomlGlobalMapValue(newKeyName, v)
 			return
 		}
@@ -276,18 +286,18 @@ func parseKv(rowStr string) {
 }
 
 // 解析素组类型的值
-func parseSliceValue(lineValue string) (interface{}, bool) {
+func parseSliceValue(keyName, lineValue string) (interface{}, bool) {
 	if strings.HasPrefix(lineValue, "[") {
 		strArr := findSliceString(lineValue)
 		if len(strArr) > 0 {
-			return parseSliceRow(lineValue, 0), true
+			return parseInlineSliceRow(keyName, lineValue, 0), true
 		}
 	}
 
 	return nil, false
 }
 
-// 解析内敛表类型的值
+// 解析内联表类型的值
 func parseMapValue(keyName, lineValue string) (interface{}, bool) {
 	if strings.HasPrefix(lineValue, "{") && strings.HasSuffix(lineValue, "}") {
 		if strings.Index(lineValue, "=") != -1 {
@@ -405,7 +415,6 @@ func parseArrayTable(rootKey, currentKey string, valueStr interface{}, keyDepth,
 		var nextObj interface{}
 		if mp, ok := obj.(map[string]interface{}); ok {
 			v := mp[preKey]
-			//fmt.Println(preKey, rootKey, keyDepth, depth)
 			if v == nil {
 				v = make(map[string]interface{})
 				mp[preKey] = v
@@ -542,7 +551,7 @@ func setArrayTable(keyName, valueKey string, valueStr interface{}) {
 }
 
 // 解析flow格式数据
-func parseInlineRow(keyName, valStr string, depth int, mp map[string]interface{}) map[string]interface{} {
+func parseInlineRow(keyName, valStr string, depth int, mp map[string]interface{}) interface{} {
 	if mp == nil {
 		mp = make(map[string]interface{})
 	}
@@ -566,6 +575,17 @@ func parseInlineRow(keyName, valStr string, depth int, mp map[string]interface{}
 		mp[keyName] = oldMp
 	}
 
+	// 如果含有数组
+	sliceArr := findSliceString(valStr)
+	tempSliceMap := make(map[string]string)
+	if len(sliceArr) > 0 {
+		for idx, v := range sliceArr {
+			destIdx := "$slice" + "_" + fmt.Sprintf("%v", idx)
+			valStr = strings.Replace(valStr, v, destIdx, -1)
+			tempSliceMap[destIdx] = v
+		}
+	}
+
 	strArr := strings.Split(valStr, ",")
 	if m, ok := oldMp.(map[string]interface{}); ok {
 		for _, kvStr := range strArr {
@@ -580,12 +600,65 @@ func parseInlineRow(keyName, valStr string, depth int, mp map[string]interface{}
 					continue
 				}
 
+				if sliceStr, ok := tempSliceMap[v]; ok {
+					retSlice := parseInlineSliceRow(k, sliceStr, 0)
+					m[k] = retSlice
+
+					continue
+				}
+
 				m[k] = v
 			}
 		}
 	}
 
-	return mp
+	return mp[keyName]
+}
+
+// 解析flow格式数据
+func parseInlineSliceRow(keyName, valStr string, depth int) []interface{} {
+	var retSlice []interface{}
+
+	strLen := len(valStr)
+	valStr = valStr[1 : strLen-1]
+
+	// 如果含有内联表
+	flowArr := findFlowString(valStr)
+	if len(flowArr) > 0 {
+		for _, flowStr := range flowArr {
+			retMap := parseInlineRow(keyName, flowStr, 0, nil)
+			retSlice = append(retSlice, retMap)
+		}
+
+		return retSlice
+	}
+
+	nextFlowArr := findSliceString(valStr)
+	tempMap := make(map[string]string)
+	for idx, v := range nextFlowArr {
+		if strings.HasPrefix(v, "[") { // 含有kv形式的进行替换，待递归处理
+			destIdx := "$slice_next_" + fmt.Sprintf("%v", depth) + "_" + fmt.Sprintf("%v", idx)
+			valStr = strings.Replace(valStr, v, destIdx, -1)
+			tempMap[destIdx] = v
+		}
+	}
+
+	valStr = strings.TrimRight(valStr, ",")
+	strArr := strings.Split(valStr, ",")
+	for _, valStr := range strArr {
+		valStr = strings.TrimSpace(valStr)
+		valStr = TrimQuote(valStr)
+
+		if val, ok := tempMap[valStr]; ok {
+			nextVal := parseInlineSliceRow(keyName, val, depth+1)
+			retSlice = append(retSlice, nextVal)
+			continue
+		}
+
+		retSlice = append(retSlice, valStr)
+	}
+
+	return retSlice
 }
 
 // 去除首尾引号

@@ -818,6 +818,9 @@ func getMapVal(keyArr []string, nextMap interface{}, depth int) interface{} {
 	if mp, ok := nextMap.(map[string]interface{}); ok {
 		if arrLen-1 == depth {
 			ret = mp[currentKey]
+			if ret == nil {
+				ret = mp[nextKey]
+			}
 		} else {
 			v := mp[currentKey]
 			if v == nil {
