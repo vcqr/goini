@@ -58,10 +58,15 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 		}
 
 		if t.String() == "time.Time" {
+			tpl := "2006-01-02 15:04:05"
+			tplName, tplVal := parseTag(field.Tag.Get("ini"), "=")
+			if tplName == "tpl" && tplVal != "" {
+				tpl = string(tplVal)
+			}
+
 			if setVal, ok := mapVal.(string); ok {
-				timeLayout := "2006-01-02 15:04:05"
 				loc, _ := time.LoadLocation("Local") //获取时区
-				theTime, _ := time.ParseInLocation(timeLayout, setVal, loc)
+				theTime, _ := time.ParseInLocation(tpl, setVal, loc)
 
 				tempV := reflect.ValueOf(theTime)
 				objV.Field(i).Set(tempV)
