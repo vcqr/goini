@@ -18,11 +18,10 @@ const (
 type TomlLineNode struct {
 	KeyName   string
 	ParentKey string
-	IsChild   int
 	Data      string
-	Arr       []map[string]interface{}
 	ArrDepth  string
 	Operate   string
+	MultiLine string
 }
 
 var tomlLineNode = TomlLineNode{
@@ -66,6 +65,7 @@ func parseTomlLine(rowB []byte) {
 			keyName := tempKey[2 : len(tempKey)-2]
 
 			tomlLineNode.KeyName = keyName
+			tomlLineNode.ParentKey = keyName
 			tomlLineNode.Operate = OpArrayTable
 
 			// 处理数组索引为平滑结构 arr[0][1][2]...[n] => 0.1.2...n
@@ -80,8 +80,6 @@ func parseTomlLine(rowB []byte) {
 
 	// 解析[xxx]行
 	if strings.HasPrefix(trimStr, "[") && strings.HasSuffix(trimStr, "]") && tomlLineNode.Operate != OpInLine {
-		parseTomlArrayLine()
-
 		strArr := findSliceString(trimStr)
 		if len(strArr) > 0 {
 			tempKey := strArr[0]
@@ -89,6 +87,7 @@ func parseTomlLine(rowB []byte) {
 
 			if tomlLineNode.Operate == OpArrayTable || tomlLineNode.Operate == OpArrayTableChild {
 				tomlLineNode.KeyName = keyName
+				tomlLineNode.ParentKey = keyName
 				tomlLineNode.Operate = OpArrayTableChild
 
 				return
@@ -104,73 +103,66 @@ func parseTomlLine(rowB []byte) {
 		}
 	}
 
-	// 解析line
-	if rxNode.MatchString(rowStr) && tomlLineNode.Operate != OpInLine && tomlLineNode.Operate != OpNewLine {
-		parseTomlArrayLine()
+	// 拼装多行为一行数据
+	if tomlLineNode.MultiLine == OpInLine || tomlLineNode.MultiLine == OpNewLine {
+		if joinMultiLine(trimStr) {
+			pos := strings.LastIndexAny(tomlLineNode.KeyName, ".")
+			keyName := tomlLineNode.KeyName
+			if pos > -1 {
+				keyName = tomlLineNode.KeyName[pos+1:]
+			}
 
-		parseKv(trimStr)
-	} else {
-		trimStr := strings.TrimSpace(rowStr)
-		trimStrComment := RemoveComments(trimStr)
-		trimStrQuote := TrimQuote(trimStrComment)
-
-		if trimStr == "\"\"\"" || trimStr == "'''" {
-			stringSetAndReset()
-			return
+			tomlLineNode.KeyName = tomlLineNode.ParentKey
+			trimStr = keyName + "=" + tomlLineNode.Data
 		} else {
-			if tomlLineNode.Operate == OpInLine {
-				if strings.HasSuffix(trimStrComment, "\"\"\"") || strings.HasSuffix(trimStrComment, "'''") {
-					tomlLineNode.Data += trimStrComment[:len(trimStrComment)-3]
+			return
+		}
+	}
 
-					stringSetAndReset()
+	if rxNode.MatchString(trimStr) {
+		parseKv(trimStr)
+	}
+}
 
-					return
-				} else if trimStrQuote == "]" {
-					tomlLineNode.Data += trimStrQuote
-					tomlLineNode.Operate = OpArrayLine
+// 解析多行数据
+func joinMultiLine(rowStr string) bool {
+	trimStr := strings.TrimSpace(rowStr)
+	trimStrComment := RemoveComments(trimStr)
+	trimStrQuote := TrimQuote(trimStrComment)
 
-					parseTomlArrayLine()
-				} else {
-					if strings.HasSuffix(trimStrQuote, "\\") {
-						trimStr = strings.TrimRight(trimStrQuote, "\\")
-						tomlLineNode.Data += trimStr
-					} else {
-						tomlLineNode.Data += trimStrQuote + "\n"
-						tomlLineNode.Operate = OpNewLine
-					}
-				}
-			}
+	if tomlLineNode.MultiLine == OpInLine || tomlLineNode.MultiLine == OpNewLine {
+		if strings.HasSuffix(trimStrComment, "\"\"\"") || strings.HasSuffix(trimStrComment, "'''") {
+			tomlLineNode.Data += trimStrComment[:len(trimStrComment)-3]
 
-			if tomlLineNode.Operate == OpNewLine {
-				if strings.HasSuffix(trimStrComment, "\"\"\"") || strings.HasSuffix(trimStrComment, "'''") {
-					tomlLineNode.Data += trimStrComment[:len(trimStrComment)-3]
+			return true
+		} else if trimStrQuote == "]" {
+			tomlLineNode.Data += trimStrQuote
+			tomlLineNode.MultiLine = OpArrayLine
 
-					stringSetAndReset()
-
-					return
-				} else {
-					// 保持原格式
-					tomlLineNode.Data += trimStrComment + "\n"
-				}
-			}
-
-			if tomlLineNode.Operate == OpArrayLine {
-				tomlLineNode.Data += trimStrComment
+			return true
+		} else {
+			if strings.HasSuffix(trimStrQuote, "\\") || strings.HasPrefix(tomlLineNode.Data, "[") {
+				trimStr = strings.TrimRight(trimStrQuote, "\\")
+				tomlLineNode.Data += trimStr
+			} else {
+				tomlLineNode.Data += trimStrQuote + "\n"
+				tomlLineNode.MultiLine = OpNewLine
 			}
 		}
 	}
+
+	return false
 }
 
 // 设置值，并重置
 func stringSetAndReset() {
-	setTomlGlobalMapValue(tomlLineNode.KeyName, tomlLineNode.Data)
 	tomlLineNode.Data = ""
 	tomlLineNode.KeyName = tomlLineNode.ParentKey
-	tomlLineNode.Operate = ""
+	tomlLineNode.MultiLine = ""
 }
 
 func parseTomlArrayLine() {
-	if tomlLineNode.Operate == OpArrayLine {
+	if tomlLineNode.MultiLine == OpArrayLine {
 		strArr := findSliceString(tomlLineNode.Data)
 		if len(strArr) > 0 {
 			retSlice := parseInlineSliceRow(tomlLineNode.KeyName, tomlLineNode.Data, 0)
@@ -180,7 +172,7 @@ func parseTomlArrayLine() {
 		// 重置
 		tomlLineNode.Data = ""
 		tomlLineNode.KeyName = tomlLineNode.ParentKey
-		tomlLineNode.Operate = ""
+		tomlLineNode.MultiLine = ""
 	}
 }
 
@@ -189,7 +181,6 @@ func parseTomlArrayLine() {
  * @param rowStr string
  */
 func parseKv(rowStr string) {
-
 	posEq := strings.IndexAny(rowStr, "=")
 
 	if posEq != -1 {
@@ -199,12 +190,70 @@ func parseKv(rowStr string) {
 		keyName = parsNodeName(keyName)
 
 		valueStrRow := rowStr[posEq+1:]
-		// 处理 """ 行
 		trimStr := strings.TrimSpace(valueStrRow)
 		trimStrComment := RemoveComments(trimStr)
 		trimStrQuote := TrimQuote(trimStrComment)
 
 		newKeyName := tomlLineNode.KeyName + "." + keyName
+
+		if tomlLineNode.MultiLine == OpInLine || tomlLineNode.MultiLine == OpNewLine || tomlLineNode.MultiLine == OpArrayLine {
+			if tomlLineNode.Operate == "" {
+				if tomlLineNode.MultiLine == OpArrayLine {
+					if v, ok := parseSliceValue(keyName, trimStrComment); ok {
+						setTomlGlobalMapValue(newKeyName, v)
+					}
+				} else {
+					setTomlGlobalMapValue(newKeyName, trimStrComment)
+				}
+			} else {
+				var rowVal interface{}
+				// 处理数组
+				if v, ok := parseSliceValue(newKeyName, trimStr); ok {
+					rowVal = v
+				}
+
+				if rowVal == nil {
+					rowVal = trimStrQuote
+				}
+
+				setArrayTable(tomlLineNode.KeyName, keyName, rowVal)
+			}
+
+			stringSetAndReset()
+			return
+		}
+
+		// string 单行
+		if (strings.HasPrefix(trimStrComment, "\"\"\"") && strings.HasSuffix(trimStrComment, "\"\"\"")) ||
+			(strings.HasPrefix(trimStrComment, "'''") && strings.HasSuffix(trimStrComment, "'''")) {
+
+			strLen := len(trimStrComment)
+			if strLen > 6 {
+				keyName = tomlLineNode.ParentKey + "." + keyName
+				setTomlGlobalMapValue(keyName, trimStrComment[3:len(trimStrComment)-3])
+				tomlLineNode.Operate = ""
+				tomlLineNode.Data = ""
+				return
+			}
+		}
+
+		// string 多行
+		if strings.HasPrefix(trimStrComment, "\"\"\"") || strings.HasPrefix(trimStrComment, "'''") {
+			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
+			if len(trimStrComment) >= 3 {
+				tomlLineNode.MultiLine = OpInLine
+			}
+
+			return
+		}
+
+		// 处理数组换行
+		if strings.HasPrefix(trimStrComment, "[") && !strings.HasSuffix(trimStrComment, "]") {
+			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
+			tomlLineNode.MultiLine = OpInLine
+			tomlLineNode.Data = trimStrQuote
+			return
+		}
 
 		// 表格数组
 		if tomlLineNode.Operate == OpArrayTable || tomlLineNode.Operate == OpArrayTableChild {
@@ -224,40 +273,6 @@ func parseKv(rowStr string) {
 			}
 
 			setArrayTable(tomlLineNode.KeyName, keyName, rowVal)
-			return
-		}
-
-		// string 单行
-		if (strings.HasPrefix(trimStrComment, "\"\"\"") && strings.HasSuffix(trimStrComment, "\"\"\"")) ||
-			(strings.HasPrefix(trimStrComment, "'''") && strings.HasSuffix(trimStrComment, "'''")) {
-
-			strLen := len(trimStrComment)
-			if strLen > 6 {
-				keyName = tomlLineNode.ParentKey + "." + keyName
-				setTomlGlobalMapValue(keyName, trimStrComment[3:len(trimStrComment)-3])
-				tomlLineNode.Operate = ""
-				return
-			}
-		}
-
-		// string 多行
-		if strings.HasPrefix(trimStrComment, "\"\"\"") || strings.HasPrefix(trimStrComment, "'''") {
-			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
-			if len(trimStrComment) >= 3 {
-				tomlLineNode.Operate = OpInLine
-			}
-			//} else {
-			//	tomlLineNode.Operate = OpNewLine
-			//}
-
-			return
-		}
-
-		// 处理数组换行
-		if strings.HasPrefix(trimStrQuote, "[") && !strings.HasSuffix(trimStrQuote, "]") {
-			tomlLineNode.KeyName = tomlLineNode.ParentKey + "." + keyName
-			tomlLineNode.Operate = OpInLine
-			tomlLineNode.Data = trimStrQuote
 			return
 		}
 
@@ -281,6 +296,10 @@ func parseKv(rowStr string) {
 		}
 
 		// 无特殊情况数值
+		if tomlLineNode.KeyName == defaultName {
+			newKeyName = keyName
+		}
+
 		setTomlGlobalMapValue(newKeyName, trimStrQuote)
 	}
 }
