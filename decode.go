@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func mapToStruct(key string, srcData map[string]interface{}, targetObj interface{}) error {
@@ -54,6 +55,19 @@ func mapToStruct(key string, srcData map[string]interface{}, targetObj interface
 		k := t.Kind()
 		if k == reflect.Ptr {
 			k = t.Elem().Kind()
+		}
+
+		if t.String() == "time.Time" {
+			if setVal, ok := mapVal.(string); ok {
+				timeLayout := "2006-01-02 15:04:05"
+				loc, _ := time.LoadLocation("Local") //获取时区
+				theTime, _ := time.ParseInLocation(timeLayout, setVal, loc)
+
+				tempV := reflect.ValueOf(theTime)
+				objV.Field(i).Set(tempV)
+			}
+
+			continue
 		}
 
 		if t.String() == "json.RawMessage" {
