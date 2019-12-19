@@ -581,7 +581,7 @@ func parseProperty(rowStr string) {
 				//设置属性
 				setProperty(keyName, retSlice)
 				//设置值
-				property[keyName] = retSlice
+				//property[keyName] = retSlice
 
 				return
 			}
@@ -591,7 +591,7 @@ func parseProperty(rowStr string) {
 		setProperty(keyName, valueStr)
 
 		//设置值
-		property[keyName] = valueStr
+		//property[keyName] = valueStr
 
 	}
 }
@@ -615,11 +615,10 @@ func parseVariate(keyName, valueStr string) bool {
 				mixVal = getValBySection(quoteKey, "")
 			}
 
-			// 设置属性
 			setProperty(keyName, mixVal)
 
 			// 设置值
-			property[keyName] = mixVal
+			//property[keyName] = mixVal
 
 			return true
 		}
@@ -702,31 +701,82 @@ func setProperty(keyName string, valueStr interface{}) {
 
 		keyArr := strings.Split(keyName, ".")
 
-		var tempStr = ""
+		//keyLen := len(keyArr) - 1
+		//
+		//for i := keyLen; i > 0; i-- {
+		//
+		//	prevStr := strings.Join(keyArr[:i], ".")
+		//
+		//	if i == keyLen {
+		//		setKeyVal(prevStr, keyArr[i], valueStr)
+		//	} else {
+		//		currentStr := prevStr + "." + keyArr[i]
+		//
+		//		setKeyVal(prevStr, currentStr, property[currentStr])
+		//	}
+		//
+		//}
+		// property[keyName] = valueStr
 
-		keyLen := len(keyArr) - 1
+		ret := setKeyVal(keyArr, valueStr, property[keyArr[0]], 1)
+		if mp, ok := ret.(map[string]interface{}); ok {
+			property[keyArr[0]] = mp
+		}
 
-		for i := keyLen; i > 0; i-- {
-
-			tempStr = keyArr[i] + "." + tempStr
-			tempStr = strings.TrimRight(tempStr, ".")
-
-			if i == keyLen {
-				prevStr := strings.Replace(keyName, "."+keyArr[i], "", -1)
-
-				setKeyVal(prevStr, keyArr[i], valueStr)
-			} else {
-				prevStr := strings.Replace(keyName, "."+tempStr, "", -1)
-				currentStr := prevStr + "." + keyArr[i]
-
-				setKeyVal(prevStr, currentStr, property[currentStr])
-			}
-
+		if _, ok := valueStr.(string); ok {
+			property[keyName] = valueStr
 		}
 
 	} else {
 		property[keyName] = valueStr
 	}
+}
+
+func setKeyVal(keyArr []string, lineVal interface{}, obj interface{}, depth int) interface{} {
+	newKeyArr := keyArr[:depth+1]
+	nextKey := strings.Join(newKeyArr, ".")
+	currentKey := keyArr[depth]
+	arrLen := len(keyArr)
+
+	if obj == nil {
+		obj = make(map[string]interface{})
+	}
+
+	if mp, ok := obj.(map[string]interface{}); ok {
+		if arrLen-1 == depth {
+			if len(mp) > 0 {
+				jsonStr, _ := json.Marshal(mp)
+				tempMap := make(map[string]interface{})
+				json.Unmarshal(jsonStr, &tempMap)
+				tempMap[currentKey] = lineVal
+				mp = tempMap
+			} else {
+				mp[currentKey] = lineVal
+			}
+
+			return mp
+		} else {
+			childObj := mp[currentKey]
+			if childObj == nil {
+				childObj = mp[nextKey]
+			}
+
+			if childObj == nil {
+				childObj = make(map[string]interface{})
+				mp[currentKey] = childObj
+				// mp[nextKey] = childObj
+			}
+
+			ret := setKeyVal(keyArr, lineVal, childObj, depth+1)
+			mp[currentKey] = ret
+
+			//if _, ok := mp[nextKey]; ok {
+			//	mp[nextKey] = ret
+			//}
+		}
+	}
+
+	return obj
 }
 
 /**
@@ -735,7 +785,7 @@ func setProperty(keyName string, valueStr interface{}) {
  * @param currentStr string 当前节点名
  * @param valueStr interface{} 混合类型的值
  */
-func setKeyVal(prevStr string, currentStr string, valueStr interface{}) {
+func setKeyValOld(prevStr string, currentStr string, valueStr interface{}) {
 
 	tempObj := property[prevStr]
 

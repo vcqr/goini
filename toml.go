@@ -35,7 +35,7 @@ func setTomlGlobalMapValue(keyName string, value interface{}) {
 	//设置属性
 	setProperty(keyName, value)
 	//设置值
-	property[keyName] = value
+	//property[keyName] = value
 }
 
 func parseTomlLine(rowB []byte) {
